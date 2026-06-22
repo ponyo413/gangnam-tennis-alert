@@ -24,8 +24,8 @@ jobs:
         uses: actions/cache@v4
         with:
           path: state.json
-          key: tennis-state-${{ github.run_id }}
-          restore-keys: tennis-state-
+          key: tennis-state-v2-${{ github.run_id }}
+          restore-keys: tennis-state-v2-
 
       - name: 빈자리 점검 실행
         env:

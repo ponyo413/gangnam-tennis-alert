@@ -1,7 +1,10 @@
 """강남구 예약 사이트에서 포이·세곡 빈자리를 읽어온다. (A안: REST API 직접 호출)
 
 분석 근거: docs/superpowers/notes-fetcher.md
-구조: fetch_raw(원문 받기) → parse_slots(원문 → Slot 목록) → fetch_slots(전체 모으기)
+빈자리 = ① 그 '날짜'가 예약가능 상태(state_cd 10/11) AND ② 그 '시간칸'이 빔(use_yn='N') AND ③ 미래
+  - ① place_month_state_list (날짜별 예약가능 여부)
+  - ② place_month_time_state_list (시간칸별 빈/참)
+구조: fetch_state_raw/fetch_time_raw(원문) → parse_open_dates/parse_slots(해석) → fetch_slots(전체)
 """
 import time as _time
 from datetime import datetime, timezone, timedelta
@@ -9,11 +12,13 @@ from datetime import datetime, timezone, timedelta
 import requests
 
 from src.models import Slot
-from src.config import COURTS
+from src.config import COURTS, OPEN_STATE_CODES
 
-# 빈자리 조회 API (한 번 호출 = 해당 월 전체 시간표)
 ROOT = "https://life.gangnam.go.kr/"
-API = ROOT + "rest/facilities/place_month_time_state_list"
+# 날짜별 '예약 가능 여부' (한 달치) — state_cd 10/11=예약가능
+STATE_API = ROOT + "rest/facilities/place_month_state_list"
+# 시간칸별 '빈/참' (한 달치) — use_yn 'N'=빈칸
+TIME_API = ROOT + "rest/facilities/place_month_time_state_list"
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -32,8 +37,7 @@ POLITE_DELAY = 0.3
 def month_base_dates(today):
     """이번달(오늘)과 다음달 1일의 YYYYMMDD 두 개를 돌려준다.
 
-    place_month_time_state_list는 base_date가 속한 '한 달'을 주므로,
-    이번달+다음달을 보려면 두 날짜로 각각 호출한다.
+    각 월별 API는 base_date가 속한 '한 달'을 주므로, 이번달+다음달을 보려면 두 날짜로 호출.
     """
     this_month = today.strftime("%Y%m%d")
     if today.month == 12:
@@ -43,31 +47,41 @@ def month_base_dates(today):
     return [this_month, nxt.strftime("%Y%m%d")]
 
 
-def parse_slots(raw, court_name, place_name, now):
-    """사이트 응답(raw)에서 '예약 가능(use_yn=N)'하고 '아직 안 지난' 시간만 Slot으로.
+def parse_open_dates(state_raw):
+    """날짜별 상태 응답에서 '온라인 예약 가능'한 날짜(ISO 문자열) 집합을 돌려준다.
 
-    - use_yn == 'N' 만 빈자리 (Y=예약완료, E=마감, U=예약불가, D=추첨)
-    - now(현재 KST)보다 미래인 것만 (과거 날짜·지난 시간도 N으로 오므로 제외)
+    state_cd 10/11=예약가능 → 포함. 15=추첨·20=마감/예약불가·30=휴관 → 제외.
+    (응답의 date는 이미 "2026-06-27" ISO 형식)
+    """
+    return {x.get("date") for x in state_raw if x.get("state_cd") in OPEN_STATE_CODES}
+
+
+def parse_slots(raw, court_name, place_name, now, open_dates):
+    """시간칸 응답(raw)에서 진짜 빈자리만 Slot으로.
+
+    조건: use_yn=='N'(빈칸) AND 그 날짜가 open_dates(예약가능)에 있음 AND now보다 미래.
     """
     slots = []
     for item in raw:
         if item.get("use_yn") != "N":
             continue
-        d = item.get("date")          # "20260622"
-        t = item.get("start_time")    # "16:00"
+        d = item.get("date")          # "20260627"
+        t = item.get("start_time")    # "20:00"
         if not d or not t:
             continue
+        iso_date = f"{d[:4]}-{d[4:6]}-{d[6:8]}"  # "2026-06-27"
+        if iso_date not in open_dates:
+            continue  # ★ 날짜가 '예약가능' 상태가 아니면 빈칸이어도 제외
         slot_dt = datetime.strptime(d + t, "%Y%m%d%H:%M").replace(tzinfo=KST)
         if slot_dt <= now:
-            continue  # 이미 지난 시간은 알릴 필요 없음
-        iso_date = f"{d[:4]}-{d[4:6]}-{d[6:8]}"  # "2026-06-22"
+            continue  # 이미 지난 시간 제외
         slots.append(Slot(court_name, place_name, iso_date, t))
     return slots
 
 
-def fetch_raw(session, comcd, part, place, base_date):
-    """한 코트·한 달치 빈자리 원문(JSON)을 사이트에서 받아온다."""
-    resp = session.get(API, params={
+def _fetch_json(session, url, comcd, part, place, base_date):
+    """공통: 한 코트·한 달치 원문(JSON)을 받아온다."""
+    resp = session.get(url, params={
         "company_code": comcd,
         "part_code": part,
         "place_code": place,
@@ -79,9 +93,9 @@ def fetch_raw(session, comcd, part, place, base_date):
 
 
 def fetch_slots():
-    """대상 코트 전부(이번달+다음달)의 현재 빈자리를 모아서 돌려준다.
+    """대상 코트 전부(이번달+다음달)의 진짜 빈자리를 모아서 돌려준다.
 
-    한 코트라도 조회에 성공하면 결과를 주고,
+    각 코트·월마다: 날짜상태(예약가능 날짜) + 시간칸(빈칸)을 함께 조회해 결합.
     모든 호출이 실패하면(사이트 다운 추정) 예외를 던져 호출부가 경고하게 한다.
     """
     session = requests.Session()
@@ -94,9 +108,13 @@ def fetch_slots():
         for place_cd, place_nm in court["places"].items():
             for base_date in base_dates:
                 try:
-                    raw = fetch_raw(session, court["comcd"], court["part"], place_cd, base_date)
+                    # ① 예약가능 날짜
+                    state_raw = _fetch_json(session, STATE_API, court["comcd"], court["part"], place_cd, base_date)
+                    open_dates = parse_open_dates(state_raw)
+                    # ② 빈 시간칸 → ①과 결합
+                    time_raw = _fetch_json(session, TIME_API, court["comcd"], court["part"], place_cd, base_date)
                     success += 1
-                    result.extend(parse_slots(raw, court["center"], place_nm, now))
+                    result.extend(parse_slots(time_raw, court["center"], place_nm, now, open_dates))
                 except Exception as e:  # 한 코트 실패는 건너뛰고 계속
                     print(f"[조회 실패] {court['center']} {place_nm} {base_date}: {e}")
                 _time.sleep(POLITE_DELAY)

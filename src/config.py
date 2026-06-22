@@ -36,3 +36,9 @@ TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
 
 # 강남구 예약 사이트 (알림 메시지에 넣을 링크)
 RESERVE_URL = "https://life.gangnam.go.kr/fmcs/1"
+
+# 날짜가 '온라인 예약 가능' 상태인지 판단하는 코드 (place_month_state_list의 state_cd)
+#   '10'=예약가능, '11'=예약가능(예비)  → 즉시 예약 대상이라 빈자리로 인정
+#   '15'=추첨접수(즉시예약 아님·제외), '20'=마감/예약불가, '30'=휴관일  → 제외
+# ⚠️ 이 검사를 빠뜨리면 '시간칸은 비었지만 예약 불가'인 날을 빈자리로 잘못 알림(과거 버그)
+OPEN_STATE_CODES = ("10", "11")
