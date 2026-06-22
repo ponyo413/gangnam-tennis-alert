@@ -1,0 +1,34 @@
+# 강남 테니스 빈자리 자동 점검 — 약 5분마다 실행
+name: 빈자리 점검
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"   # 5분마다 (GitHub 최소 간격; 혼잡 시 지연될 수 있음)
+  workflow_dispatch:         # 손으로도 실행해 볼 수 있게 (Actions 탭의 Run workflow)
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: 라이브러리 설치
+        run: pip install -r requirements.txt
+
+      # 직전 실행이 남긴 state.json 불러오기 (없으면 그냥 첫 실행으로 시작)
+      - name: 직전 기록 복원
+        uses: actions/cache@v4
+        with:
+          path: state.json
+          key: tennis-state-${{ github.run_id }}
+          restore-keys: tennis-state-
+
+      - name: 빈자리 점검 실행
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python -m src.main
