@@ -12,7 +12,7 @@ from datetime import datetime, timezone, timedelta
 import requests
 
 from src.models import Slot
-from src.config import COURTS, OPEN_STATE_CODES
+from src.config import COURTS, OPEN_STATE_CODES, FACILITIES
 
 ROOT = "https://life.gangnam.go.kr/"
 # 날짜별 '예약 가능 여부' (한 달치) — state_cd 10/11=예약가능
@@ -121,4 +121,42 @@ def fetch_slots():
 
     if success == 0:
         raise RuntimeError("모든 코트 조회 실패 — 사이트 접속 불가로 추정")
+    return result
+
+
+# ─────────────────────────────────────────────────────────────
+# 신청기간 알림: 시설 신청상태 조회 (place_detail)
+# ─────────────────────────────────────────────────────────────
+DETAIL_API = ROOT + "rest/facilities/place_detail"
+
+
+def parse_status(detail):
+    """place_detail 응답에서 신청 상태 정보(상태·접수기간·이용기간)만 추린다."""
+    return {
+        "state": detail.get("state_nm", ""),
+        "receipt": detail.get("receipt_period", ""),
+        "period": detail.get("period", ""),
+    }
+
+
+def fetch_facility_status():
+    """포이·세곡의 신청 상태를 {시설명: {state, receipt, period}}로 돌려준다.
+
+    한 시설 조회가 실패하면 그 시설만 건너뛴다.
+    """
+    session = requests.Session()
+    session.headers.update(HEADERS)
+    result = {}
+    for f in FACILITIES:
+        try:
+            resp = session.get(DETAIL_API, params={
+                "company_code": f["comcd"],
+                "part_code": f["part"],
+                "place_code": f["place"],
+            }, timeout=15)
+            resp.raise_for_status()
+            result[f["name"]] = parse_status(resp.json())
+        except Exception as e:
+            print(f"[상태 조회 실패] {f['name']}: {e}")
+        _time.sleep(POLITE_DELAY)
     return result

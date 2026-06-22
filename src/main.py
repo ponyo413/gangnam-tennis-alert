@@ -1,48 +1,66 @@
-"""전체 흐름 조율: 조회 → 시간대 필터 → 새 빈자리 비교 → 알림 → 상태 저장."""
+"""전체 흐름 조율: ① 빈자리/취소표 알림 ② 신청기간(준비중→접수중) 알림."""
 import sys
 from pathlib import Path
 
-from src.fetcher import fetch_slots
+from src.fetcher import fetch_slots, fetch_facility_status
 from src.filters import is_wanted_time
-from src.differ import find_new_slots
-from src.notifier import format_message, send_telegram
-from src.state import load_slots, save_slots
+from src.differ import find_new_slots, find_opened
+from src.notifier import format_message, send_telegram, format_application_message
+from src.state import load_slots, save_slots, load_status, save_status
+from src.config import STATUS_PATH
 
-STATE_PATH = "state.json"  # 직전 빈자리 기록 위치
+STATE_PATH = "state.json"  # 직전 빈자리 기록
 
 
-def main() -> int:
-    # 1) 사이트에서 현재 빈자리 전부 읽기
+def run_vacancy_alert():
+    """① 빈자리/취소표 알림."""
     try:
         current_all = fetch_slots()
     except Exception as e:
-        # 사이트 자체를 못 읽으면 '읽기 실패'를 알려서 조용히 죽지 않게
         send_telegram(f"⚠️ 빈자리 읽기 실패: {e}")
         print(f"[읽기 실패] {e}")
-        return 1
+        return
 
-    # 2) 원하는 시간대(평일 저녁+주말)만 거르기
     wanted = [s for s in current_all if is_wanted_time(s)]
+    is_first = not Path(STATE_PATH).exists()
+    new_slots = find_new_slots(wanted, load_slots(STATE_PATH))
 
-    # 3) 첫 실행(직전 기록 파일 없음)인지 확인 — 알림 폭탄 방지
-    is_first_run = not Path(STATE_PATH).exists()
-    previous = load_slots(STATE_PATH)
-    new_slots = find_new_slots(wanted, previous)
-
-    if is_first_run:
-        # 처음엔 현재 빈자리가 수백 건일 수 있으므로 알리지 않고 기준만 저장
-        print(f"[첫 실행] 현재 빈자리 {len(wanted)}건을 기준으로 저장 (알림 생략)")
+    if is_first:
+        print(f"[빈자리 첫 실행] {len(wanted)}건 기준 저장(알림 생략)")
     else:
-        # 4) 직전과 비교해 새로 생긴 빈자리만 텔레그램 알림
-        message = format_message(new_slots)
-        if message:
-            send_telegram(message)
-            print(f"[알림] 새 빈자리 {len(new_slots)}건 발송")
+        msg = format_message(new_slots)
+        if msg:
+            send_telegram(msg)
+            print(f"[빈자리 알림] {len(new_slots)}건")
         else:
-            print("[변화 없음]")
-
-    # 5) 이번 결과를 직전 기록으로 저장 (다음 비교용)
+            print("[빈자리 변화 없음]")
     save_slots(STATE_PATH, wanted)
+
+
+def run_application_alert():
+    """② 신청기간(준비중→접수중) 알림."""
+    status = fetch_facility_status()
+    if not status:
+        print("[신청상태 조회 0건]")
+        return
+
+    is_first = not Path(STATUS_PATH).exists()
+    opened = find_opened(status, load_status(STATUS_PATH))
+
+    if is_first:
+        print(f"[신청상태 첫 실행] {len(status)}곳 기준 저장(알림 생략)")
+    else:
+        for name in opened:
+            send_telegram(format_application_message(name, status[name]))
+            print(f"[신청 시작 알림] {name}")
+        if not opened:
+            print("[신청상태 변화 없음]")
+    save_status(STATUS_PATH, status)
+
+
+def main() -> int:
+    run_vacancy_alert()
+    run_application_alert()
     return 0
 
 

@@ -36,3 +36,13 @@ def send_telegram(text: str) -> bool:
         url, data={"chat_id": TELEGRAM_CHAT_ID, "text": text}, timeout=10
     )
     return resp.ok
+
+
+def format_application_message(name: str, info: dict) -> str:
+    """신청 시작(준비중→접수중) 알림 메시지를 만든다."""
+    return (
+        f"🎾 {name} 신청 시작!\n"
+        f"📋 접수기간: {info.get('receipt', '')}\n"
+        f"📅 이용: {info.get('period', '')}\n"
+        f"👉 지금 신청: {RESERVE_URL}"
+    )

@@ -21,3 +21,15 @@ def test_변화_없으면_빈_목록():
 def test_직전이_비어있으면_전부_새것():
     current = [Slot("포이", "코트A", "2026-06-25", "19:00")]
     assert find_new_slots(current, []) == current
+
+
+def test_준비중에서_접수중_전환만_감지():
+    from src.differ import find_opened
+    previous = {"포이 테니스장": {"state": "준비중"}, "세곡 체육공원": {"state": "접수중"}}
+    current = {"포이 테니스장": {"state": "접수중"}, "세곡 체육공원": {"state": "접수중"}}
+    assert find_opened(current, previous) == ["포이 테니스장"]
+
+
+def test_직전_없으면_전환_아님():
+    from src.differ import find_opened
+    assert find_opened({"포이 테니스장": {"state": "접수중"}}, {}) == []

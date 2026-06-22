@@ -15,3 +15,16 @@ def test_저장한_그대로_불러오기(tmp_path):
 
 def test_없는_파일은_빈_목록(tmp_path):
     assert load_slots(tmp_path / "none.json") == []
+
+
+def test_시설상태_저장_불러오기(tmp_path):
+    from src.state import save_status, load_status
+    path = tmp_path / "status.json"
+    status = {"포이 테니스장": {"state": "준비중", "receipt": "6/24~6/29", "period": "-"}}
+    save_status(path, status)
+    assert load_status(path) == status
+
+
+def test_없는_상태파일은_빈_dict(tmp_path):
+    from src.state import load_status
+    assert load_status(tmp_path / "none.json") == {}

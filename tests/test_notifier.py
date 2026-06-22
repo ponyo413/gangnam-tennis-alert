@@ -22,3 +22,10 @@ def test_여러_빈자리_모두_포함():
 
 def test_빈_목록은_빈_문자열():
     assert format_message([]) == ""
+
+
+def test_신청시작_메시지():
+    from src.notifier import format_application_message
+    info = {"state": "접수중", "receipt": "2026-06-24~2026-06-29", "period": "2026-07-01~2026-07-31"}
+    msg = format_application_message("포이 테니스장", info)
+    assert "포이 테니스장" in msg and "신청 시작" in msg and "2026-06-24~2026-06-29" in msg

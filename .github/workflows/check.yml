@@ -23,9 +23,11 @@ jobs:
       - name: 직전 기록 복원
         uses: actions/cache@v4
         with:
-          path: state.json
-          key: tennis-state-v2-${{ github.run_id }}
-          restore-keys: tennis-state-v2-
+          path: |
+            state.json
+            status.json
+          key: tennis-state-v3-${{ github.run_id }}
+          restore-keys: tennis-state-v3-
 
       - name: 빈자리 점검 실행
         env:

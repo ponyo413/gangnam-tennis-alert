@@ -24,3 +24,16 @@ def load_slots(path) -> list[Slot]:
         return []
     data = json.loads(p.read_text(encoding="utf-8"))
     return [Slot(d["court"], d["place"], d["date"], d["time"]) for d in data]
+
+
+def save_status(path, status: dict) -> None:
+    """시설별 신청상태 dict를 JSON으로 저장."""
+    Path(path).write_text(json.dumps(status, ensure_ascii=False), encoding="utf-8")
+
+
+def load_status(path) -> dict:
+    """시설별 신청상태 dict를 불러옴. 파일이 없으면 빈 dict."""
+    p = Path(path)
+    if not p.exists():
+        return {}
+    return json.loads(p.read_text(encoding="utf-8"))
