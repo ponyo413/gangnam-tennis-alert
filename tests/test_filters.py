@@ -25,3 +25,14 @@ def test_낮시간_제외_주말도():
 
 def test_22시_시작은_제외():
     assert is_wanted_time(Slot("세곡", "1번코트", "2026-06-27", "22:00")) is False
+
+
+def test_송파_토요일_08_10시만():
+    from src.filters import is_songpa_wanted
+    # 2026-07-04는 토요일
+    assert is_songpa_wanted(Slot("송파", "테니스장", "2026-07-04", "08:00")) is True
+    assert is_songpa_wanted(Slot("송파", "테니스장", "2026-07-04", "10:00")) is True
+    # 같은 토요일이라도 다른 시간은 제외
+    assert is_songpa_wanted(Slot("송파", "테니스장", "2026-07-04", "12:00")) is False
+    # 토요일이 아니면 제외 (2026-07-01=수)
+    assert is_songpa_wanted(Slot("송파", "테니스장", "2026-07-01", "08:00")) is False
