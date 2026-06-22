@@ -1,0 +1,26 @@
+"""직전 빈자리 목록을 JSON 파일에 저장/불러오기.
+
+GitHub Actions는 실행마다 기억이 초기화되므로, 이 파일을 캐시에 보관해
+다음 실행과 비교한다. (상세는 .github/workflows/check.yml 참고)
+"""
+import json
+from pathlib import Path
+from src.models import Slot
+
+
+def save_slots(path, slots: list[Slot]) -> None:
+    """빈자리 목록을 JSON 파일로 저장."""
+    data = [
+        {"court": s.court, "place": s.place, "date": s.date, "time": s.time}
+        for s in slots
+    ]
+    Path(path).write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+
+
+def load_slots(path) -> list[Slot]:
+    """JSON 파일에서 빈자리 목록을 불러옴. 파일이 없으면 빈 목록."""
+    p = Path(path)
+    if not p.exists():
+        return []
+    data = json.loads(p.read_text(encoding="utf-8"))
+    return [Slot(d["court"], d["place"], d["date"], d["time"]) for d in data]

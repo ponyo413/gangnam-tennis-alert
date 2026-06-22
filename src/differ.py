@@ -1,0 +1,12 @@
+"""직전 빈자리 목록과 이번 목록을 비교해 '새로 생긴 빈자리'만 찾는다."""
+from src.models import Slot
+
+
+def find_new_slots(current: list[Slot], previous: list[Slot]) -> list[Slot]:
+    """이번(current)에는 있는데 직전(previous)에는 없던 빈자리만 돌려준다.
+
+    Slot이 frozen=True라 set으로 빠르게 '있었나?' 확인 가능.
+    current의 순서는 그대로 유지한다.
+    """
+    previous_set = set(previous)
+    return [slot for slot in current if slot not in previous_set]
