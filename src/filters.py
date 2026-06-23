@@ -16,3 +16,14 @@ def is_songpa_wanted(slot: Slot) -> bool:
     if date(y, m, d).weekday() != 5:  # 월=0 ... 토=5
         return False
     return slot.time in ("08:00", "10:00")
+
+
+def is_jamsil_wanted(slot: Slot) -> bool:
+    """잠실: 매일 저녁 19~21시 시작 + 토요일 08·10시 시작."""
+    hour = int(slot.time.split(":")[0])
+    if EVENING_START <= hour < EVENING_END:  # 19·20·21시(=저녁 7~10시)
+        return True
+    y, m, d = (int(x) for x in slot.date.split("-"))
+    if date(y, m, d).weekday() == 5 and slot.time in ("08:00", "10:00"):  # 토=5
+        return True
+    return False

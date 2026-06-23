@@ -36,3 +36,28 @@ def test_송파_토요일_08_10시만():
     assert is_songpa_wanted(Slot("송파", "테니스장", "2026-07-04", "12:00")) is False
     # 토요일이 아니면 제외 (2026-07-01=수)
     assert is_songpa_wanted(Slot("송파", "테니스장", "2026-07-01", "08:00")) is False
+
+
+from src.filters import is_jamsil_wanted
+from src.models import Slot
+
+
+def test_jamsil_weekday_evening_allowed():
+    # 2026-07-01 수요일 — 저녁 20시 허용
+    assert is_jamsil_wanted(Slot("잠실", "테니스장", "2026-07-01", "20:00")) is True
+
+
+def test_jamsil_weekday_morning_rejected():
+    # 평일 오전 10시 제외(토요일 아님)
+    assert is_jamsil_wanted(Slot("잠실", "테니스장", "2026-07-01", "10:00")) is False
+
+
+def test_jamsil_saturday_morning_allowed():
+    # 2026-07-04 토요일 — 오전 08·10시 허용
+    assert is_jamsil_wanted(Slot("잠실", "테니스장", "2026-07-04", "08:00")) is True
+    assert is_jamsil_wanted(Slot("잠실", "테니스장", "2026-07-04", "10:00")) is True
+
+
+def test_jamsil_daytime_weekday_rejected():
+    # 평일 낮 14시 제외
+    assert is_jamsil_wanted(Slot("잠실", "테니스장", "2026-07-01", "14:00")) is False
