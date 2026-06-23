@@ -3,8 +3,8 @@ import sys
 from pathlib import Path
 
 from src.fetcher import fetch_slots, fetch_facility_status
-from src.songpa import fetch_songpa_slots
-from src.filters import is_wanted_time, is_songpa_wanted
+from src.esongpa import fetch_esongpa_slots
+from src.filters import is_wanted_time
 from src.differ import find_new_slots, find_opened
 from src.notifier import format_message, send_telegram, format_application_message
 from src.state import load_slots, save_slots, load_status, save_status
@@ -23,11 +23,11 @@ def run_vacancy_alert():
         return
 
     wanted = [s for s in current_all if is_wanted_time(s)]
-    # 송파(로그인 필요) — 실패해도 강남 알림은 계속 진행
+    # esongpa(송파·잠실, 로그인 필요) — 실패해도 강남 알림은 계속 진행
     try:
-        wanted += [s for s in fetch_songpa_slots() if is_songpa_wanted(s)]
+        wanted += fetch_esongpa_slots()  # 시설별 시간필터는 내부에서 적용
     except Exception as e:
-        print(f"[송파 조회 실패] {e}")
+        print(f"[esongpa 조회 실패] {e}")
 
     is_first = not Path(STATE_PATH).exists()
     new_slots = find_new_slots(wanted, load_slots(STATE_PATH))
