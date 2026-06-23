@@ -39,25 +39,41 @@ def test_송파_토요일_08_10시만():
 
 
 from src.filters import is_jamsil_wanted
-from src.models import Slot
 
 
-def test_jamsil_weekday_evening_allowed():
-    # 2026-07-01 수요일 — 저녁 20시 허용
-    assert is_jamsil_wanted(Slot("잠실", "테니스장", "2026-07-01", "20:00")) is True
+# 잠실 규칙(2시간 단위 시설): 주말(토·일) 18·20시 둘 다 / 평일 월·화·수 20시만 / 목·금 없음
+# (요일 확정: 2026-07-04=토, 07-05=일, 07-06=월, 07-07=화, 07-01·08=수, 07-02=목, 07-03=금)
 
 
-def test_jamsil_weekday_morning_rejected():
-    # 평일 오전 10시 제외(토요일 아님)
-    assert is_jamsil_wanted(Slot("잠실", "테니스장", "2026-07-01", "10:00")) is False
+def test_잠실_주말_18시20시_둘다_허용():
+    # 토(07-04)·일(07-05): 18시·20시 두 타임 모두 알림
+    assert is_jamsil_wanted(Slot("잠실", "테니스장", "2026-07-04", "18:00")) is True
+    assert is_jamsil_wanted(Slot("잠실", "테니스장", "2026-07-04", "20:00")) is True
+    assert is_jamsil_wanted(Slot("잠실", "테니스장", "2026-07-05", "18:00")) is True
+    assert is_jamsil_wanted(Slot("잠실", "테니스장", "2026-07-05", "20:00")) is True
 
 
-def test_jamsil_saturday_morning_allowed():
-    # 2026-07-04 토요일 — 오전 08·10시 허용
-    assert is_jamsil_wanted(Slot("잠실", "테니스장", "2026-07-04", "08:00")) is True
-    assert is_jamsil_wanted(Slot("잠실", "테니스장", "2026-07-04", "10:00")) is True
+def test_잠실_월화수_20시만_허용():
+    # 월(07-06)·화(07-07)·수(07-08): 20시 타임만 알림
+    assert is_jamsil_wanted(Slot("잠실", "테니스장", "2026-07-06", "20:00")) is True
+    assert is_jamsil_wanted(Slot("잠실", "테니스장", "2026-07-07", "20:00")) is True
+    assert is_jamsil_wanted(Slot("잠실", "테니스장", "2026-07-08", "20:00")) is True
 
 
-def test_jamsil_daytime_weekday_rejected():
-    # 평일 낮 14시 제외
-    assert is_jamsil_wanted(Slot("잠실", "테니스장", "2026-07-01", "14:00")) is False
+def test_잠실_월화수_18시는_제외():
+    # 평일(월화수)은 20시만 — 18시는 제외
+    assert is_jamsil_wanted(Slot("잠실", "테니스장", "2026-07-06", "18:00")) is False  # 월
+    assert is_jamsil_wanted(Slot("잠실", "테니스장", "2026-07-08", "18:00")) is False  # 수
+
+
+def test_잠실_목금은_전부_제외():
+    # 목(07-02)·금(07-03)은 알림 없음(저녁이라도)
+    assert is_jamsil_wanted(Slot("잠실", "테니스장", "2026-07-02", "20:00")) is False  # 목
+    assert is_jamsil_wanted(Slot("잠실", "테니스장", "2026-07-03", "20:00")) is False  # 금
+
+
+def test_잠실_낮시간은_제외():
+    # 주말·평일 모두 낮(08·14·16시)은 제외 — 저녁 18·20시만 대상
+    assert is_jamsil_wanted(Slot("잠실", "테니스장", "2026-07-04", "08:00")) is False  # 토 오전
+    assert is_jamsil_wanted(Slot("잠실", "테니스장", "2026-07-04", "14:00")) is False  # 토 낮
+    assert is_jamsil_wanted(Slot("잠실", "테니스장", "2026-07-06", "16:00")) is False  # 월 낮
