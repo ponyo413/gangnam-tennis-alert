@@ -8,3 +8,5 @@ __pycache__/
 .pytest_cache/
 # 사이트 분석용 임시 스크립트(조사용, 배포와 무관)
 _scratch/
+# 설정표 직전 정상 백업(런타임 자동 생성)
+settings.last_good.yaml
