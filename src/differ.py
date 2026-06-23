@@ -12,6 +12,14 @@ def find_new_slots(current: list[Slot], previous: list[Slot]) -> list[Slot]:
     return [slot for slot in current if slot not in previous_set]
 
 
+def has_changed(current: list[Slot], previous: list[Slot]) -> bool:
+    """빈자리 목록이 직전과 달라졌는지(추가·삭제 무관, 순서 무시).
+
+    빈자리 현황이 바뀔 때마다 '현재 전체 현황'을 알리기 위해 쓴다.
+    """
+    return set(current) != set(previous)
+
+
 def find_opened(current: dict, previous: dict) -> list:
     """신청 상태가 '준비중' → '접수중'으로 바뀐 시설명 목록을 돌려준다.
 

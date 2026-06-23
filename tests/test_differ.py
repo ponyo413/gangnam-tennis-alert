@@ -33,3 +33,24 @@ def test_준비중에서_접수중_전환만_감지():
 def test_직전_없으면_전환_아님():
     from src.differ import find_opened
     assert find_opened({"포이 테니스장": {"state": "접수중"}}, {}) == []
+
+
+def test_has_changed_추가되면_변동():
+    from src.differ import has_changed
+    prev = [Slot("포이", "코트A", "2026-06-25", "19:00")]
+    curr = prev + [Slot("세곡", "1번코트", "2026-06-27", "20:00")]
+    assert has_changed(curr, prev) is True
+
+
+def test_has_changed_없어지면_변동():
+    from src.differ import has_changed
+    prev = [Slot("포이", "코트A", "2026-06-25", "19:00"), Slot("세곡", "1번코트", "2026-06-27", "20:00")]
+    curr = [Slot("포이", "코트A", "2026-06-25", "19:00")]
+    assert has_changed(curr, prev) is True
+
+
+def test_has_changed_같으면_변동없음_순서무관():
+    from src.differ import has_changed
+    a = [Slot("포이", "코트A", "2026-06-25", "19:00"), Slot("세곡", "1번코트", "2026-06-27", "20:00")]
+    b = list(reversed(a))  # 순서만 다름
+    assert has_changed(a, b) is False

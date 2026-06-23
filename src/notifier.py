@@ -48,12 +48,16 @@ def format_application_message(name: str, info: dict) -> str:
     )
 
 
-def format_summary(slots: list[Slot], failures: dict | None = None) -> str:
-    """매일 1회 '현재 빈자리 전체' 요약. 빈 목록이면 '없음'. 어제 실패 있으면 한 줄 덧붙임."""
+def format_summary(slots: list[Slot], failures: dict | None = None,
+                   title: str = "🎾 [오늘의 빈자리 현황]") -> str:
+    """'현재 빈자리 전체' 요약. 빈 목록이면 '없음'. 어제 실패 있으면 한 줄 덧붙임.
+
+    title로 머리말을 바꿀 수 있다(변동 알림은 '🔔 빈자리 현황이 바뀌었어요').
+    """
     if not slots:
-        lines = ["🎾 [오늘의 빈자리 현황]", "현재 빈자리 없음"]
+        lines = [title, "현재 빈자리 없음"]
     else:
-        lines = ["🎾 [오늘의 빈자리 현황]"]
+        lines = [title]
         for s in sorted(slots, key=lambda x: (x.court, x.date, x.time)):
             lines.append(f"🏟 {s.court} {s.place}  📅 {s.date} {s.time}")
         lines.append(f"👉 예약: {RESERVE_URL}")

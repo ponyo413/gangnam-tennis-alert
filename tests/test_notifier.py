@@ -60,3 +60,9 @@ def test_요약에_실패보고_붙는다():
 def test_실패없으면_실패줄_없음():
     msg = format_summary([], failures={})
     assert "실패" not in msg
+
+
+def test_summary_제목_바꿀수있다():
+    msg = format_summary([], title="🔔 빈자리 현황이 바뀌었어요")
+    assert "🔔 빈자리 현황이 바뀌었어요" in msg
+    assert "오늘의 빈자리 현황" not in msg
