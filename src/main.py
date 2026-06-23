@@ -1,6 +1,7 @@
 """전체 흐름 조율: ① 빈자리/취소표 알림 ② 신청기간(준비중→접수중) 알림.
 
 시설별 켜고끄기·시간대는 settings.yaml(설정표)에서 읽어 적용한다.
+조회 실패는 failures.json에 누적해 매일 아침 요약에 한 줄로 보고한다.
 """
 import sys
 from pathlib import Path
@@ -11,10 +12,11 @@ from src.filters import is_wanted_for
 from src.settings_loader import load_settings
 from src.differ import find_new_slots, find_opened
 from src.notifier import format_message, send_telegram, format_application_message, format_summary
-from src.state import load_slots, save_slots, load_status, save_status
+from src.state import load_slots, save_slots, load_status, save_status, load_failures, save_failures
 from src.config import STATUS_PATH
 
-STATE_PATH = "state.json"  # 직전 빈자리 기록
+STATE_PATH = "state.json"      # 직전 빈자리 기록
+FAIL_PATH = "failures.json"    # 시설별 조회 실패 횟수(요약 때 보고 후 리셋)
 
 
 def run_vacancy_alert():
@@ -31,11 +33,14 @@ def run_vacancy_alert():
 
     gangnam_cfg = settings.get("강남", {})
     wanted = [s for s in current_all if is_wanted_for(s, gangnam_cfg)]
-    # esongpa(송파·잠실, 로그인 필요) — 실패해도 강남 알림은 계속 진행
+    # esongpa(송파·잠실, 로그인 필요) — 실패해도 강남 알림은 계속 진행 + 실패 누적
+    failures = load_failures(FAIL_PATH)
     try:
         wanted += fetch_esongpa_slots(settings)  # 시설별 켜고끄기+시간필터는 내부에서
     except Exception as e:
+        failures["esongpa"] = failures.get("esongpa", 0) + 1
         print(f"[esongpa 조회 실패] {e}")
+    save_failures(FAIL_PATH, failures)
 
     is_first = not Path(STATE_PATH).exists()
     new_slots = find_new_slots(wanted, load_slots(STATE_PATH))
@@ -74,7 +79,7 @@ def run_application_alert():
 
 
 def run_summary():
-    """매일 1회: 현재 '원하는 시간대' 빈자리 전체를 요약 발송(직전기록 불필요)."""
+    """매일 1회: 현재 '원하는 시간대' 빈자리 전체 + 어제 실패를 요약 발송(직전기록 불필요)."""
     settings, err = load_settings()
     if err:
         send_telegram(f"⚠️ {err}")
@@ -88,8 +93,10 @@ def run_summary():
         wanted += fetch_esongpa_slots(settings)  # 송파·잠실(설정 기반)
     except Exception as e:
         print(f"[요약-esongpa 조회 실패] {e}")
-    send_telegram(format_summary(wanted))
-    print(f"[요약 발송] {len(wanted)}건")
+    failures = load_failures(FAIL_PATH)
+    send_telegram(format_summary(wanted, failures=failures))
+    save_failures(FAIL_PATH, {})  # 보고 후 실패 카운트 리셋
+    print(f"[요약 발송] {len(wanted)}건, 실패 {sum(failures.values())}건")
 
 
 def main() -> int:

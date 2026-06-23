@@ -37,3 +37,16 @@ def load_status(path) -> dict:
     if not p.exists():
         return {}
     return json.loads(p.read_text(encoding="utf-8"))
+
+
+def load_failures(path) -> dict:
+    """시설별 조회 실패 횟수 dict. 파일 없으면 빈 dict."""
+    p = Path(path)
+    if not p.exists():
+        return {}
+    return json.loads(p.read_text(encoding="utf-8"))
+
+
+def save_failures(path, failures: dict) -> None:
+    """시설별 조회 실패 횟수 dict 저장."""
+    Path(path).write_text(json.dumps(failures, ensure_ascii=False), encoding="utf-8")

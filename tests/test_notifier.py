@@ -49,3 +49,14 @@ def test_summary_lists_slots_sorted():
 def test_summary_empty_says_none():
     msg = format_summary([])
     assert "빈자리 없음" in msg
+
+
+def test_요약에_실패보고_붙는다():
+    msg = format_summary([], failures={"잠실": 3})
+    assert "현재 빈자리 없음" in msg
+    assert "잠실" in msg and "3" in msg and "실패" in msg
+
+
+def test_실패없으면_실패줄_없음():
+    msg = format_summary([], failures={})
+    assert "실패" not in msg
