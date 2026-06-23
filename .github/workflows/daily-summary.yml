@@ -17,6 +17,16 @@ jobs:
           python-version: "3.13"
       - name: 라이브러리 설치
         run: pip install -r requirements.txt
+      # 5분 점검(check.yml)이 쌓은 실패 카운트를 같은 캐시에서 읽어와 요약에 보고.
+      - name: 직전 기록 복원(실패 카운트 공유)
+        uses: actions/cache@v4
+        with:
+          path: |
+            state.json
+            status.json
+            failures.json
+          key: tennis-state-v4-${{ github.run_id }}
+          restore-keys: tennis-state-v4-
       - name: 빈자리 요약 발송
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
