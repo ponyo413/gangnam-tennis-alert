@@ -29,3 +29,23 @@ def test_신청시작_메시지():
     info = {"state": "접수중", "receipt": "2026-06-24~2026-06-29", "period": "2026-07-01~2026-07-31"}
     msg = format_application_message("포이 테니스장", info)
     assert "포이 테니스장" in msg and "신청 시작" in msg and "2026-06-24~2026-06-29" in msg
+
+
+from src.notifier import format_summary
+from src.models import Slot
+
+
+def test_summary_lists_slots_sorted():
+    slots = [
+        Slot("세곡", "3번코트", "2026-07-02", "21:00"),
+        Slot("송파", "테니스장", "2026-07-04", "08:00"),
+    ]
+    msg = format_summary(slots)
+    assert "빈자리 현황" in msg
+    assert "세곡" in msg and "송파" in msg
+    assert "2026-07-02" in msg
+
+
+def test_summary_empty_says_none():
+    msg = format_summary([])
+    assert "빈자리 없음" in msg

@@ -46,3 +46,14 @@ def format_application_message(name: str, info: dict) -> str:
         f"📅 이용: {info.get('period', '')}\n"
         f"👉 지금 신청: {RESERVE_URL}"
     )
+
+
+def format_summary(slots: list[Slot]) -> str:
+    """매일 1회 '현재 빈자리 전체' 요약 메시지. 빈 목록이면 '없음' 한 줄."""
+    if not slots:
+        return "🎾 [오늘의 빈자리 현황]\n현재 빈자리 없음"
+    lines = ["🎾 [오늘의 빈자리 현황]"]
+    for s in sorted(slots, key=lambda x: (x.court, x.date, x.time)):
+        lines.append(f"🏟 {s.court} {s.place}  📅 {s.date} {s.time}")
+    lines.append(f"👉 예약: {RESERVE_URL}")
+    return "\n".join(lines)
