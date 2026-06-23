@@ -6,7 +6,7 @@ from src.fetcher import fetch_slots, fetch_facility_status
 from src.esongpa import fetch_esongpa_slots
 from src.filters import is_wanted_time
 from src.differ import find_new_slots, find_opened
-from src.notifier import format_message, send_telegram, format_application_message
+from src.notifier import format_message, send_telegram, format_application_message, format_summary
 from src.state import load_slots, save_slots, load_status, save_status
 from src.config import STATUS_PATH
 
@@ -65,9 +65,29 @@ def run_application_alert():
     save_status(STATUS_PATH, status)
 
 
+def run_summary():
+    """매일 1회: 현재 '원하는 시간대' 빈자리 전체를 요약 발송(직전기록 불필요)."""
+    wanted = []
+    try:
+        wanted += [s for s in fetch_slots() if is_wanted_time(s)]
+    except Exception as e:
+        print(f"[요약-강남 조회 실패] {e}")
+    try:
+        wanted += fetch_esongpa_slots()  # 송파·잠실(시설별 필터 적용)
+    except Exception as e:
+        print(f"[요약-esongpa 조회 실패] {e}")
+    send_telegram(format_summary(wanted))
+    print(f"[요약 발송] {len(wanted)}건")
+
+
 def main() -> int:
-    run_vacancy_alert()
-    run_application_alert()
+    # 인자 'summary' → 일일 요약, 그 외 → 기존 취소표/신청 감시
+    mode = sys.argv[1] if len(sys.argv) > 1 else "watch"
+    if mode == "summary":
+        run_summary()
+    else:
+        run_vacancy_alert()
+        run_application_alert()
     return 0
 
 
