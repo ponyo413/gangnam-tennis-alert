@@ -47,4 +47,5 @@ def test_fetch_does_not_raise_when_a_site_fails(monkeypatch):
 
     monkeypatch.setattr(e, "_login", boom)
     # 모든 시설이 실패해도 예외를 던지지 않고 빈 목록을 돌려줘야 한다
-    assert e.fetch_esongpa_slots() == []
+    from src.settings_loader import DEFAULT_SETTINGS
+    assert e.fetch_esongpa_slots(DEFAULT_SETTINGS) == []

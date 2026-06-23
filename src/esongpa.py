@@ -1,7 +1,8 @@
 # src/esongpa.py
 """esongpa(송파·잠실) 빈자리 조회 — 로그인 + HTML 파싱 공용.
 
-시설별 차이(주소·목록페이지·원하는 시간대)는 ESONGPA_SITES 설정으로 분리.
+시설별 차이(주소·목록페이지)는 ESONGPA_SITES로 분리.
+시간대/켜고끄기는 settings.yaml(설정표)에서 받아 is_wanted_for로 거른다.
 로그인 ID/비번은 환경변수(SONGPA_ID/SONGPA_PW)에서만 가져온다(코드에 안 적음).
 """
 import os
@@ -12,7 +13,7 @@ import requests
 import urllib3
 
 from src.models import Slot
-from src.filters import is_songpa_wanted, is_jamsil_wanted
+from src.filters import is_wanted_for
 
 urllib3.disable_warnings()  # esongpa 사이트 SSL 체인 불완전(사이트 문제) 우회
 
@@ -27,12 +28,10 @@ _SLOT_RE = re.compile(
     re.DOTALL,
 )
 
-# 시설 설정 — 시설마다 주소·목록페이지·원하는 시간대만 다름(파싱·로그인은 공용)
+# 시설 설정 — 주소·목록페이지만(시간대·켜고끄기는 settings.yaml 설정표에서)
 ESONGPA_SITES = [
-    {"center": "송파", "base": "https://spc.esongpa.or.kr",
-     "list_page": "s05.od.list.php", "wanted": is_songpa_wanted},
-    {"center": "잠실", "base": "https://club.esongpa.or.kr",
-     "list_page": "s07.od.list.php", "wanted": is_jamsil_wanted},
+    {"center": "송파", "base": "https://spc.esongpa.or.kr", "list_page": "s05.od.list.php"},
+    {"center": "잠실", "base": "https://club.esongpa.or.kr", "list_page": "s07.od.list.php"},
 ]
 
 
@@ -64,10 +63,11 @@ def _months(today):
     return [this_m, nxt.strftime("%Y-%m")]
 
 
-def fetch_esongpa_slots():
-    """등록된 모든 esongpa 시설의 빈자리(시설별 시간필터 적용)를 Slot 목록으로.
+def fetch_esongpa_slots(settings):
+    """등록된 esongpa 시설의 빈자리(설정 기반 켜고끄기 + 시간필터)를 Slot 목록으로.
 
-    ID/비번 미설정이면 빈 목록(비활성). 한 시설 실패는 건너뛰고 나머지 시설은 계속.
+    settings: {"송파": {...}, "잠실": {...}} 형태(설정표). 받기=False면 그 시설 건너뜀.
+    ID/비번 미설정이면 빈 목록(비활성). 한 시설 실패는 건너뛰고 나머지는 계속.
     """
     if not (os.environ.get("SONGPA_ID") and os.environ.get("SONGPA_PW")):
         return []
@@ -75,6 +75,9 @@ def fetch_esongpa_slots():
     now = datetime.now(KST)
     result = []
     for site in ESONGPA_SITES:
+        cfg = settings.get(site["center"])
+        if not cfg or not cfg.get("받기"):
+            continue  # 설정표에서 끈 시설은 조회 자체를 안 함
         # 한 시설이 실패해도 다른 시설 조회는 계속(잠실 실패해도 송파는 진행)
         try:
             # 도메인마다 쿠키가 분리될 수 있어 시설별로 세션+로그인
@@ -87,7 +90,7 @@ def fetch_esongpa_slots():
                 r = session.get(url, params={"sch_sym": ym}, verify=False, timeout=20)
                 for slot in parse_esongpa(r.text, site["center"]):
                     slot_dt = datetime.strptime(slot.date + slot.time, "%Y-%m-%d%H:%M").replace(tzinfo=KST)
-                    if slot_dt > now and site["wanted"](slot):
+                    if slot_dt > now and is_wanted_for(slot, cfg):
                         result.append(slot)
         except Exception as e:
             print(f"[{site['center']} 조회 실패] {e}")
