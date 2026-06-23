@@ -19,13 +19,14 @@ jobs:
       - name: 라이브러리 설치
         run: pip install -r requirements.txt
 
-      # 직전 실행이 남긴 state.json 불러오기 (없으면 그냥 첫 실행으로 시작)
+      # 직전 실행이 남긴 기록 불러오기 (없으면 그냥 첫 실행으로 시작)
       - name: 직전 기록 복원
         uses: actions/cache@v4
         with:
           path: |
             state.json
             status.json
+            failures.json
           key: tennis-state-v4-${{ github.run_id }}
           restore-keys: tennis-state-v4-
 
@@ -36,3 +37,13 @@ jobs:
           SONGPA_ID: ${{ secrets.SONGPA_ID }}
           SONGPA_PW: ${{ secrets.SONGPA_PW }}
         run: python -m src.main
+
+      # 봇이 한 바퀴 정상 완료했음을 외부 감시(healthchecks.io)에 알림.
+      # 이 신호가 약 10분 끊기면 healthchecks.io가 텔레그램으로 "봇 멈춤"을 알린다.
+      # HC_PING_URL 시크릿이 없으면 건너뜀(봇 동작에 영향 없음).
+      - name: 살아있어 신호(healthchecks)
+        if: always()   # 조회가 일부 실패해도 '봇은 살아있음'은 보냄
+        run: |
+          if [ -n "${{ secrets.HC_PING_URL }}" ]; then
+            curl -fsS -m 10 --retry 3 "${{ secrets.HC_PING_URL }}" || true
+          fi
