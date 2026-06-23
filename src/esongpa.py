@@ -67,7 +67,7 @@ def _months(today):
 def fetch_esongpa_slots():
     """등록된 모든 esongpa 시설의 빈자리(시설별 시간필터 적용)를 Slot 목록으로.
 
-    ID/비번 미설정이면 빈 목록(비활성). 한 시설 로그인 실패는 예외.
+    ID/비번 미설정이면 빈 목록(비활성). 한 시설 실패는 건너뛰고 나머지 시설은 계속.
     """
     if not (os.environ.get("SONGPA_ID") and os.environ.get("SONGPA_PW")):
         return []
@@ -75,16 +75,20 @@ def fetch_esongpa_slots():
     now = datetime.now(KST)
     result = []
     for site in ESONGPA_SITES:
-        # 도메인마다 쿠키가 분리될 수 있어 시설별로 세션+로그인
-        session = requests.Session()
-        session.headers.update(HEADERS)
-        if not _login(session, site["base"]):
-            raise RuntimeError(f"{site['center']} 로그인 실패 (ID/비번 확인)")
-        for ym in _months(now.date()):
-            url = site["base"] + "/page/rent/" + site["list_page"]
-            r = session.get(url, params={"sch_sym": ym}, verify=False, timeout=20)
-            for slot in parse_esongpa(r.text, site["center"]):
-                slot_dt = datetime.strptime(slot.date + slot.time, "%Y-%m-%d%H:%M").replace(tzinfo=KST)
-                if slot_dt > now and site["wanted"](slot):
-                    result.append(slot)
+        # 한 시설이 실패해도 다른 시설 조회는 계속(잠실 실패해도 송파는 진행)
+        try:
+            # 도메인마다 쿠키가 분리될 수 있어 시설별로 세션+로그인
+            session = requests.Session()
+            session.headers.update(HEADERS)
+            if not _login(session, site["base"]):
+                raise RuntimeError(f"{site['center']} 로그인 실패 (ID/비번 확인)")
+            for ym in _months(now.date()):
+                url = site["base"] + "/page/rent/" + site["list_page"]
+                r = session.get(url, params={"sch_sym": ym}, verify=False, timeout=20)
+                for slot in parse_esongpa(r.text, site["center"]):
+                    slot_dt = datetime.strptime(slot.date + slot.time, "%Y-%m-%d%H:%M").replace(tzinfo=KST)
+                    if slot_dt > now and site["wanted"](slot):
+                        result.append(slot)
+        except Exception as e:
+            print(f"[{site['center']} 조회 실패] {e}")
     return result

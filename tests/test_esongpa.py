@@ -31,3 +31,20 @@ def test_parse_jamsil_same_structure():
     assert slots[0].court == "잠실"
     assert slots[0].date == "2026-07-04"
     assert slots[0].time == "21:00"
+
+
+def test_fetch_does_not_raise_when_a_site_fails(monkeypatch):
+    """한 시설 조회가 실패해도 함수 전체가 죽지 않는다(시설별 격리).
+
+    잠실 로그인이 실패해도 송파/강남 알림이 함께 끊기지 않게 하려는 것.
+    """
+    import src.esongpa as e
+    monkeypatch.setenv("SONGPA_ID", "x")
+    monkeypatch.setenv("SONGPA_PW", "y")
+
+    def boom(session, base):
+        raise RuntimeError("로그인 실패")
+
+    monkeypatch.setattr(e, "_login", boom)
+    # 모든 시설이 실패해도 예외를 던지지 않고 빈 목록을 돌려줘야 한다
+    assert e.fetch_esongpa_slots() == []
