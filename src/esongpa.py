@@ -12,7 +12,7 @@ import requests
 import urllib3
 
 from src.models import Slot
-from src.filters import is_songpa_wanted
+from src.filters import is_songpa_wanted, is_jamsil_wanted
 
 urllib3.disable_warnings()  # esongpa 사이트 SSL 체인 불완전(사이트 문제) 우회
 
@@ -27,10 +27,12 @@ _SLOT_RE = re.compile(
     re.DOTALL,
 )
 
-# 시설 설정 — 잠실은 다음 작업에서 한 줄 추가
+# 시설 설정 — 시설마다 주소·목록페이지·원하는 시간대만 다름(파싱·로그인은 공용)
 ESONGPA_SITES = [
     {"center": "송파", "base": "https://spc.esongpa.or.kr",
      "list_page": "s05.od.list.php", "wanted": is_songpa_wanted},
+    {"center": "잠실", "base": "https://club.esongpa.or.kr",
+     "list_page": "s07.od.list.php", "wanted": is_jamsil_wanted},
 ]
 
 
