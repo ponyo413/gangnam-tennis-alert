@@ -34,17 +34,18 @@ def run_vacancy_alert():
 
     gangnam_cfg = settings.get("강남", {})
     wanted = [s for s in current_all if is_wanted_for(s, gangnam_cfg)]
+    # 직전 빈자리 — '접수 닫힘'(저녁)인 esongpa 시설은 새 0건 대신 이걸 그대로 유지한다
+    previous = load_slots(STATE_PATH)
     # esongpa(송파·잠실, 로그인 필요) — 실패해도 강남 알림은 계속 진행 + 실패 누적
     failures = load_failures(FAIL_PATH)
     try:
-        wanted += fetch_esongpa_slots(settings)  # 시설별 켜고끄기+시간필터는 내부에서
+        wanted += fetch_esongpa_slots(settings, previous)  # 닫힘 시설은 직전 유지(내부 판정)
     except Exception as e:
         failures["esongpa"] = failures.get("esongpa", 0) + 1
         print(f"[esongpa 조회 실패] {e}")
     save_failures(FAIL_PATH, failures)
 
     is_first = not Path(STATE_PATH).exists()
-    previous = load_slots(STATE_PATH)
     if is_first:
         print(f"[빈자리 첫 실행] {len(wanted)}건 기준 저장(알림 생략)")
     elif has_changed(wanted, previous):
@@ -88,8 +89,9 @@ def run_summary():
         wanted += [s for s in fetch_slots() if is_wanted_for(s, gangnam_cfg)]
     except Exception as e:
         print(f"[요약-강남 조회 실패] {e}")
+    previous = load_slots(STATE_PATH)  # 접수 닫힘 시설은 직전(낮에 본) 빈자리를 요약에 유지
     try:
-        wanted += fetch_esongpa_slots(settings)  # 송파·잠실(설정 기반)
+        wanted += fetch_esongpa_slots(settings, previous)  # 송파·잠실(설정 기반, 닫힘 시 직전 유지)
     except Exception as e:
         print(f"[요약-esongpa 조회 실패] {e}")
     failures = load_failures(FAIL_PATH)
