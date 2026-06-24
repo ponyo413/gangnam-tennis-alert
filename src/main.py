@@ -13,11 +13,29 @@ from src.filters import is_wanted_for
 from src.settings_loader import load_settings
 from src.differ import has_changed, find_opened
 from src.notifier import send_telegram, format_application_message, format_summary
-from src.state import load_slots, save_slots, load_status, save_status, load_failures, save_failures
+from src.state import (load_slots, save_slots, load_status, save_status,
+                       load_failures, save_failures, load_fail_count, save_fail_count)
 from src.config import STATUS_PATH
 
 STATE_PATH = "state.json"      # 직전 빈자리 기록
 FAIL_PATH = "failures.json"    # 시설별 조회 실패 횟수(요약 때 보고 후 리셋)
+READ_FAIL_PATH = "read_fail.json"   # 강남 조회 '연속' 실패 횟수(산발 끊김 무시용)
+READ_FAIL_THRESHOLD = 3             # 연속 3회(=약 15분)부터 '사이트 다운'으로 보고 알림
+
+
+def read_fail_decision(prev_count, success, threshold=READ_FAIL_THRESHOLD):
+    """강남 조회 결과로 (새 연속실패 카운트, 보낼 알림종류)를 정한다 — 순수함수.
+
+    강남 사이트는 밤에 간헐적으로 연결이 끊긴다(산발 timeout). 매번 알리면 시끄러우니
+    연속 임계에 도달했을 때만 'down', 다운에서 풀리면 'recover'만 보낸다.
+    - success=True(조회 성공): 직전이 다운(임계 이상)이었으면 'recover', 카운트는 0으로.
+    - success=False(조회 실패): 카운트 +1, 그 값이 '정확히 임계'면 'down'(그 위는 조용).
+    반환: (new_count, alert) — alert는 None / 'down' / 'recover'.
+    """
+    if success:
+        return 0, ("recover" if prev_count >= threshold else None)
+    new_count = prev_count + 1
+    return new_count, ("down" if new_count == threshold else None)
 
 
 def run_vacancy_alert():
@@ -25,12 +43,23 @@ def run_vacancy_alert():
     settings, err = load_settings()
     if err:
         send_telegram(f"⚠️ {err}")  # 설정표 형식 오류 시 알림(폴백으로 계속 작동)
+    # 강남 조회 '연속' 실패 추적 — 조회 전에 직전 카운트를 읽어둔다(산발 timeout 무시용)
+    prev_fail = load_fail_count(READ_FAIL_PATH)
     try:
         current_all = fetch_slots()
     except Exception as e:
-        send_telegram(f"⚠️ 빈자리 읽기 실패: {e}")
-        print(f"[읽기 실패] {e}")
+        # 강남 사이트 일시 끊김은 흔하다 → 연속 임계(약 15분)에 도달했을 때만 1통 알림
+        count, alert = read_fail_decision(prev_fail, success=False)
+        save_fail_count(READ_FAIL_PATH, count)
+        if alert == "down":
+            send_telegram(f"⚠️ 강남 사이트 응답 없음 (연속 {count}회·약 15분): {e}")
+        print(f"[읽기 실패 {count}회 연속] {e}")
         return
+    # 조회 성공 → 직전이 '다운'이었으면 복구 알림 1통 + 연속 카운트 리셋(함수가 0을 돌려줌)
+    new_count, recovered = read_fail_decision(prev_fail, success=True)
+    if recovered == "recover":
+        send_telegram("✅ 강남 사이트 복구됨 — 빈자리 알림을 다시 받습니다.")
+    save_fail_count(READ_FAIL_PATH, new_count)
 
     gangnam_cfg = settings.get("강남", {})
     wanted = [s for s in current_all if is_wanted_for(s, gangnam_cfg)]

@@ -28,3 +28,17 @@ def test_시설상태_저장_불러오기(tmp_path):
 def test_없는_상태파일은_빈_dict(tmp_path):
     from src.state import load_status
     assert load_status(tmp_path / "none.json") == {}
+
+
+def test_연속실패_카운트_저장_불러오기(tmp_path):
+    """강남 조회 연속 실패 횟수를 파일에 저장하고 그대로 다시 읽어야 함."""
+    from src.state import save_fail_count, load_fail_count
+    path = tmp_path / "read_fail.json"
+    save_fail_count(path, 3)
+    assert load_fail_count(path) == 3
+
+
+def test_없는_카운트파일은_0(tmp_path):
+    """카운트 파일이 없으면(첫 실행) 0으로 시작."""
+    from src.state import load_fail_count
+    assert load_fail_count(tmp_path / "none.json") == 0

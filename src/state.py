@@ -50,3 +50,19 @@ def load_failures(path) -> dict:
 def save_failures(path, failures: dict) -> None:
     """시설별 조회 실패 횟수 dict 저장."""
     Path(path).write_text(json.dumps(failures, ensure_ascii=False), encoding="utf-8")
+
+
+def load_fail_count(path) -> int:
+    """강남 조회 '연속 실패' 횟수를 불러옴. 파일이 없거나 깨졌으면 0(첫 실행 취급)."""
+    p = Path(path)
+    if not p.exists():
+        return 0
+    try:
+        return int(json.loads(p.read_text(encoding="utf-8")).get("count", 0))
+    except Exception:
+        return 0
+
+
+def save_fail_count(path, count: int) -> None:
+    """강남 조회 '연속 실패' 횟수를 저장."""
+    Path(path).write_text(json.dumps({"count": count}, ensure_ascii=False), encoding="utf-8")
