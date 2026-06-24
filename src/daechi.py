@@ -21,6 +21,11 @@ HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
 BASE = "https://www.xn--vk1b79znxd34c61h.kr/"  # 대치유수지.kr(퓨니코드)
 TENNIS_TYPE = "8"  # type=8 = 테니스장(7=축구장 등 다른 종목)
 
+# 조회 게이트(매크로 빈번접속 공지 존중) — 빈도/활동시간은 코드 상수로 고정
+ACTIVE_START_HOUR = 8    # 조회 시작 시각(08시)
+ACTIVE_END_HOUR = 24     # 조회 끝(24시=자정) → now.hour < 24라 실질 08~23시
+FETCH_INTERVAL_MIN = 15  # 조회 최소 간격(분)
+
 # 한 시간대 행(<dl>) → 그 안의 코트 칸(<dt>) → 빈자리 단서(data-date/time + on)
 _ROW_RE = re.compile(r"<dl>(.*?)</dl>", re.DOTALL)
 _CELL_RE = re.compile(r"<dt>(.*?)</dt>", re.DOTALL)
@@ -91,3 +96,18 @@ def fetch_daechi_slots(settings):
         except Exception as ex:  # 한 달 실패는 건너뛰고 계속
             print(f"[대치유수지 {year}-{month:02d} 조회 실패] {ex}")
     return result
+
+
+def is_daechi_due(now, last_fetch, interval_min=FETCH_INTERVAL_MIN):
+    """지금 대치유수지를 실제로 조회할 때인지 판정(순수함수).
+
+    실제 접속 조건 = ① 활동시간(KST 08~24시) 안 AND ② 마지막 조회 후 interval_min분 경과.
+    - 활동시간 밖(새벽 0~8시) → False (접속 안 함, 사이트 부담·공지 존중)
+    - 한 번도 조회 안 했으면(last_fetch=None) 활동시간 안일 때 True
+    now: KST aware datetime. last_fetch: datetime 또는 None.
+    """
+    if not (ACTIVE_START_HOUR <= now.hour < ACTIVE_END_HOUR):
+        return False
+    if last_fetch is None:
+        return True
+    return (now - last_fetch).total_seconds() >= interval_min * 60
