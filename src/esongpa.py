@@ -9,11 +9,11 @@ import os
 import re
 from datetime import datetime, timezone, timedelta
 
-import requests
 import urllib3
 
 from src.models import Slot
 from src.filters import is_wanted_for
+from src.http_session import make_session
 
 urllib3.disable_warnings()  # esongpa 사이트 SSL 체인 불완전(사이트 문제) 우회
 
@@ -104,8 +104,7 @@ def fetch_esongpa_slots(settings, previous_slots=()):
         # 한 시설이 실패해도 다른 시설 조회는 계속(잠실 실패해도 송파는 진행)
         try:
             # 도메인마다 쿠키가 분리될 수 있어 시설별로 세션+로그인
-            session = requests.Session()
-            session.headers.update(HEADERS)
+            session = make_session(HEADERS)
             if not _login(session, site["base"]):
                 raise RuntimeError(f"{center} 로그인 실패 (ID/비번 확인)")
             site_slots = []   # 이 시설에서 새로 뽑은 빈자리(원하는 시간대 + 미래)

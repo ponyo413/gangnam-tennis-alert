@@ -9,10 +9,9 @@
 import time as _time
 from datetime import datetime, timezone, timedelta
 
-import requests
-
 from src.models import Slot
 from src.config import COURTS, OPEN_STATE_CODES, FACILITIES
+from src.http_session import make_session
 
 ROOT = "https://life.gangnam.go.kr/"
 # 날짜별 '예약 가능 여부' (한 달치) — state_cd 10/11=예약가능
@@ -87,7 +86,7 @@ def _fetch_json(session, url, comcd, part, place, base_date):
         "place_code": place,
         "base_date": base_date,
         "rent_type": "",
-    }, timeout=15)
+    }, timeout=10)
     resp.raise_for_status()
     return resp.json()
 
@@ -98,8 +97,7 @@ def fetch_slots():
     각 코트·월마다: 날짜상태(예약가능 날짜) + 시간칸(빈칸)을 함께 조회해 결합.
     모든 호출이 실패하면(사이트 다운 추정) 예외를 던져 호출부가 경고하게 한다.
     """
-    session = requests.Session()
-    session.headers.update(HEADERS)
+    session = make_session(HEADERS)
     now = datetime.now(KST)
     base_dates = month_base_dates(now.date())
 
@@ -144,8 +142,7 @@ def fetch_facility_status():
 
     한 시설 조회가 실패하면 그 시설만 건너뛴다.
     """
-    session = requests.Session()
-    session.headers.update(HEADERS)
+    session = make_session(HEADERS)
     result = {}
     for f in FACILITIES:
         try:
@@ -153,7 +150,7 @@ def fetch_facility_status():
                 "company_code": f["comcd"],
                 "part_code": f["part"],
                 "place_code": f["place"],
-            }, timeout=15)
+            }, timeout=10)
             resp.raise_for_status()
             result[f["name"]] = parse_status(resp.json())
         except Exception as e:

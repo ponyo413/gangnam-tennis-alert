@@ -32,6 +32,7 @@ jobs:
           restore-keys: tennis-state-v4-
 
       - name: 빈자리 점검 실행
+        timeout-minutes: 7      # 사이트 완전 다운 시 재시도로 무한정 매달리지 않게 상한(평소 30초, 최악 ~5.5분)
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
