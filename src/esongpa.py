@@ -121,7 +121,10 @@ def fetch_esongpa_slots(settings, previous_slots=()):
             # 접수 닫힘(저녁): 빈칸이 전부 접수불가라 이 시각 조회 결과(0건)는 못 믿는다.
             # → 직전에 보던 이 시설 빈자리를 그대로 유지(낮 접수시간이 되면 다시 갱신).
             if _is_intake_closed("".join(pages)):
-                kept = [s for s in previous_slots if s.court == center]
+                # 단, 이미 지나간 시각은 버린다(저녁 동안 과거 슬롯이 요약 메시지에 남지 않게)
+                kept = [s for s in previous_slots
+                        if s.court == center
+                        and datetime.strptime(s.date + s.time, "%Y-%m-%d%H:%M").replace(tzinfo=KST) > now]
                 result += kept
                 print(f"[{center} 접수시간 아님 → 직전 {len(kept)}건 유지]")
             else:

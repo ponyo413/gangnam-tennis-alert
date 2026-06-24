@@ -117,3 +117,32 @@ def test_closed_site_keeps_previous_slots(monkeypatch):
                          "월": [20], "화": [20], "수": [20]}}
     result = e.fetch_esongpa_slots(settings, previous)
     assert previous[0] in result  # 직전에 보던 잠실 빈자리가 유지됨
+
+
+def test_closed_site_drops_past_slots(monkeypatch):
+    """닫힘이어도 직전 슬롯 중 '이미 지나간 시각'은 버린다 — 요약에 과거 잔류 방지.
+
+    저녁에 직전(낮) 빈자리를 그대로 들고 있으면, 그 중 오늘 이미 지난 시각이
+    state.json·요약 메시지에 남는다. 미래 슬롯만 유지해야 아침에 과거가 안 보인다.
+    """
+    import src.esongpa as e
+    from src.models import Slot
+    monkeypatch.setenv("SONGPA_ID", "x")
+    monkeypatch.setenv("SONGPA_PW", "y")
+    monkeypatch.setattr(e, "_login", lambda session, base: True)
+    monkeypatch.setattr(e, "ESONGPA_SITES",
+                        [{"center": "잠실", "base": "http://x", "list_page": "s07.od.list.php"}])
+    closed_html = "<li>18:00~20:00<span class='status_e'>접수불가시간</span></li>"
+
+    class FakeResp:
+        text = closed_html
+
+    monkeypatch.setattr("requests.Session.get", lambda self, *a, **k: FakeResp())
+
+    past = Slot("잠실", "테니스장", "2000-01-01", "18:00")    # 한참 지난 과거
+    future = Slot("잠실", "테니스장", "2099-01-03", "18:00")  # 먼 미래
+    settings = {"잠실": {"받기": True, "토": [18, 20], "일": [18, 20],
+                         "월": [20], "화": [20], "수": [20]}}
+    result = e.fetch_esongpa_slots(settings, [past, future])
+    assert future in result        # 미래 슬롯은 유지
+    assert past not in result      # 과거 슬롯은 버려짐
