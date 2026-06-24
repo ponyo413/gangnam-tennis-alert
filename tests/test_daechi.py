@@ -46,3 +46,57 @@ def test_parse_ignores_full_rows():
         "</dl>"
     )
     assert parse_daechi(full) == []
+
+
+# ──────────────────────────────────────────────
+# Task 2: fetch_daechi_slots 조회+필터 테스트
+# ──────────────────────────────────────────────
+from src.daechi import fetch_daechi_slots
+
+
+def test_fetch_skips_when_disabled():
+    """받기=False거나 설정이 없으면 조회 자체를 안 하고 빈 목록."""
+    assert fetch_daechi_slots({"대치유수지": {"받기": False}}) == []
+    assert fetch_daechi_slots({}) == []
+
+
+def test_fetch_filters_time_and_drops_past(monkeypatch):
+    """원하는 시각(매일 [7])만 + 미래만 남긴다. 과거·다른시각은 제외."""
+    html = (
+        "<dl><dd>07:00~09:00</dd>"
+        "<dt><a data-date=\"2099-07-04\" data-time=\"0\"><img src=\"possible_icn_on.gif\"></a></dt>"
+        "<dt><a><img src=\"possible_icn_off.gif\"></a></dt>"
+        "<dt><a><img src=\"possible_icn_off.gif\"></a></dt></dl>"
+        "<dl><dd>07:00~09:00</dd>"
+        "<dt><a data-date=\"2000-01-01\" data-time=\"0\"><img src=\"possible_icn_on.gif\"></a></dt>"
+        "<dt><a><img src=\"possible_icn_off.gif\"></a></dt>"
+        "<dt><a><img src=\"possible_icn_off.gif\"></a></dt></dl>"
+        "<dl><dd>09:00~11:00</dd>"
+        "<dt><a data-date=\"2099-07-04\" data-time=\"1\"><img src=\"possible_icn_on.gif\"></a></dt>"
+        "<dt><a><img src=\"possible_icn_off.gif\"></a></dt>"
+        "<dt><a><img src=\"possible_icn_off.gif\"></a></dt></dl>"
+    )
+
+    class FakeResp:
+        text = html
+
+    monkeypatch.setattr("requests.Session.get", lambda self, *a, **k: FakeResp())
+    monkeypatch.setattr("src.daechi._months", lambda today: [(2099, 7)])
+
+    settings = {"대치유수지": {"받기": True, "매일": [7]}}
+    slots = fetch_daechi_slots(settings)
+
+    assert len(slots) == 1
+    assert slots[0].date == "2099-07-04"
+    assert slots[0].time == "07:00"
+    assert slots[0].place == "A코트"
+
+
+def test_fetch_does_not_raise_on_network_error(monkeypatch):
+    """조회가 터져도 예외를 밖으로 던지지 않고 빈 목록(다른 시설 알림 보호)."""
+    def boom(self, *a, **k):
+        raise RuntimeError("연결 실패")
+
+    monkeypatch.setattr("requests.Session.get", boom)
+    settings = {"대치유수지": {"받기": True, "매일": [7]}}
+    assert fetch_daechi_slots(settings) == []
