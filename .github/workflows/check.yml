@@ -27,6 +27,7 @@ jobs:
             state.json
             status.json
             failures.json
+            read_fail.json
           key: tennis-state-v4-${{ github.run_id }}
           restore-keys: tennis-state-v4-
 
