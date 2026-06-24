@@ -49,7 +49,11 @@ def parse_daechi(html):
 
 
 def _months(today):
-    """이번 달·다음 달 (연, 월) 두 개 — 페이지를 두 달치 조회하기 위함."""
+    """이번 달·다음 달 (연, 월) 정수 튜플 두 개 — 페이지를 두 달치 조회하기 위함.
+
+    today: date 객체(보통 now.date())를 받는다. 대치유수지 URL 파라미터(cyear/cmonth)가
+    정수를 받으므로 (year, month) 정수 튜플을 돌려준다 — esongpa._months("YYYY-MM" 문자열)와 다름.
+    """
     if today.month == 12:
         nxt = (today.year + 1, 1)
     else:

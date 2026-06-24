@@ -1,5 +1,5 @@
 """대치유수지 파싱·조회 동작 박제 — 고정 HTML + 네트워크 monkeypatch."""
-from src.daechi import parse_daechi
+from src.daechi import parse_daechi, fetch_daechi_slots
 
 # 실측 구조 축약: 한 <dl>=한 시간대 행, <dt> 3개=A·B·C 코트.
 # '가능'(possible_icn_on) 칸만 data-date/data-time을 가진다.
@@ -51,9 +51,6 @@ def test_parse_ignores_full_rows():
 # ──────────────────────────────────────────────
 # Task 2: fetch_daechi_slots 조회+필터 테스트
 # ──────────────────────────────────────────────
-from src.daechi import fetch_daechi_slots
-
-
 def test_fetch_skips_when_disabled():
     """받기=False거나 설정이 없으면 조회 자체를 안 하고 빈 목록."""
     assert fetch_daechi_slots({"대치유수지": {"받기": False}}) == []
