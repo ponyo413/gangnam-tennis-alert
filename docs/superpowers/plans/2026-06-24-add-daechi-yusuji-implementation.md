@@ -1,12 +1,12 @@
-# 대치유수지 테니스장 추가 — 구현 공정표
+# 대치유수지 테니스장 추가 — 구현 공정표 (개정: 15분·08~24시 저빈도)
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 대치유수지 테니스장 빈자리(취소표)를 강남·송파·잠실과 같은 텔레그램 봇에서 함께 알린다.
+**Goal:** 대치유수지 테니스장 빈자리(취소표)를 강남·송파·잠실과 같은 텔레그램 봇에서 함께 알린다. 단 사이트의 "매크로 빈번 접속 금지" 공지를 존중해 **15분 간격 + 한국시간 08~24시에만** 조회한다.
 
-**Architecture:** 로그인 없는 Rhymix 계열 HTML 페이지라, 강남(REST)·esongpa(로그인)와 별개의 전용 부품 `src/daechi.py`를 신설한다. 빈자리(`possible_icn_on`) 칸의 `data-date`·`data-time`과 `<dt>` 순서(A·B·C)로 슬롯을 뽑고, 공용 `is_wanted_for`로 시간대를 거른다. 기존 부품은 손대지 않고 `main.py`에 호출 한 줄씩만 더한다.
+**Architecture:** 로그인 없는 HTML 페이지라 전용 부품 `src/daechi.py`를 신설(파싱 `parse_daechi` + 조회 `fetch_daechi_slots` + 게이트 `is_daechi_due`). 봇은 5분마다 돌지만 `main`이 게이트로 "지금 접속할 때인가"를 판단해 **15분에 1번만 실제 접속**하고, 그 외엔 **직전 박제 결과를 유지**한다. 마지막 조회 시각은 `state.py`에 저장한다.
 
-**Tech Stack:** Python 3, `requests`(+`http_session.make_session`), 표준 `re`, pytest(monkeypatch).
+**Tech Stack:** Python 3, `requests`(+`http_session.make_session`), 표준 `re`/`datetime`, pytest(monkeypatch, tmp_path).
 
 설계서: `docs/superpowers/specs/2026-06-24-add-daechi-yusuji-design.md`
 
@@ -16,89 +16,31 @@
 
 | 파일 | 책임 | 작업 |
 |------|------|------|
-| `src/daechi.py` | 대치유수지 조회 + 빈자리 파싱 + 시간/미래 필터 | **신규** (~70줄) |
-| `tests/test_daechi.py` | 파싱·조회 동작 박제 | **신규** |
-| `settings.yaml` | 대치유수지 감시 시간대 설정 | 블록 추가 |
-| `src/main.py` | 빈자리/요약 흐름에 대치유수지 합류 | import + 호출 2곳 |
-| `README.md` | 감시 대상 목록에 대치유수지 추가 | 한 줄 |
+| `src/daechi.py` | 대치유수지 조회 + 파싱 + 조회 게이트 | **신규** |
+| `tests/test_daechi.py` | 파싱·조회·게이트 동작 박제 | **신규** |
+| `src/state.py` | 마지막 조회 시각 저장/로드 함수 추가 | 함수 2개 추가 |
+| `tests/test_state.py` | 시각 저장 왕복 테스트 | 테스트 2개 추가 |
+| `settings.yaml` | 대치유수지 감시 시간대 | 블록 추가 |
+| `src/main.py` | 게이트로 조회 or 직전 유지 + 합류 | import·상수·호출 |
+| `README.md` | 감시 대상 목록 | 한 줄 |
 
 > 빈자리 칸 구조(실측): 한 `<dl>`(시간대 행) 안에 `<dt>` 3개 = A·B·C 코트.
 > `가능` 칸만 `data-date="YYYY-MM-DD" data-time="N"`을 가짐. 시작시각 = `7 + N*2` (0→07시 … 6→19시).
+
+> **저빈도 규칙:** 실제 접속 = (KST 08~23시) **그리고** (마지막 조회 후 15분 경과). 둘 중 하나라도
+> 아니면 접속하지 않고 직전 박제 빈자리를 그대로 쓴다. 빈도/시간창은 코드 상수.
 
 > **실행 위치:** 아래 모든 `python`·`pytest`·`git` 명령은 봇 루트
 > `C:\Users\user\Desktop\gangnam-tennis-alert`에서 실행한다(`src` 패키지 import가 되도록).
 
 ---
 
-## Task 1: `parse_daechi` — 빈자리 칸 파싱
+## Task 1: `parse_daechi` — 빈자리 칸 파싱  ✅ 이미 완료 (커밋 `9f15347`)
 
-**Files:**
-- Create: `src/daechi.py`
-- Test: `tests/test_daechi.py`
+> 이 Task는 개정 전 이미 구현·검토 완료. 파싱은 조회 빈도와 무관하므로 **변경 없이 유효**.
+> 참고용 최종 코드(이미 반영됨):
 
-- [ ] **Step 1: Write the failing test**
-
-`tests/test_daechi.py`:
-```python
-# tests/test_daechi.py
-"""대치유수지 파싱·조회 동작 박제 — 고정 HTML + 네트워크 monkeypatch."""
-from src.daechi import parse_daechi
-
-# 실측 구조 축약: 한 <dl>=한 시간대 행, <dt> 3개=A·B·C 코트.
-# '가능'(possible_icn_on) 칸만 data-date/data-time을 가진다.
-SAMPLE_HTML = (
-    "<dl><dd>07:00~09:00</dd>"
-    "<dt><a href=\"#\" class=\"_rev\"><img src=\"/images/sub/possible_icn_off.gif\" title=\"불가능\" /></a></dt>"
-    "<dt><a href=\"#\" class=\"_rev\" data-date=\"2099-07-04\" data-time=\"0\" data-type=\"9\">"
-    "<img src=\"/images/sub/possible_icn_on.gif\" title=\"가능\" /></a></dt>"
-    "<dt><a href=\"#\" class=\"_rev\"><img src=\"/images/sub/possible_icn_off.gif\" title=\"불가능\" /></a></dt>"
-    "</dl>"
-    "<dl><dd>19:00~21:00</dd>"
-    "<dt><a href=\"#\" class=\"_rev\" data-date=\"2099-07-04\" data-time=\"6\" data-type=\"9\">"
-    "<img src=\"/images/sub/possible_icn_on.gif\" title=\"가능\" /></a></dt>"
-    "<dt><a href=\"#\" class=\"_rev\"><img src=\"/images/sub/possible_icn_off.gif\" title=\"불가능\" /></a></dt>"
-    "<dt><a href=\"#\" class=\"_rev\"><img src=\"/images/sub/possible_icn_off.gif\" title=\"불가능\" /></a></dt>"
-    "</dl>"
-)
-
-
-def test_parse_extracts_only_available_with_court_and_time():
-    """가능 칸만 추출 + 코트(순서)·시각(7+N*2) 매핑."""
-    slots = parse_daechi(SAMPLE_HTML)
-    # 07시 행: 2번째 칸(B코트) 가능 / 19시 행: 1번째 칸(A코트) 가능 → 2건
-    assert len(slots) == 2
-    by_time = {s.time: s for s in slots}
-
-    s07 = by_time["07:00"]
-    assert s07.court == "대치유수지"   # 시설명
-    assert s07.place == "B코트"        # <dt> 2번째 = B
-    assert s07.date == "2099-07-04"
-
-    s19 = by_time["19:00"]
-    assert s19.place == "A코트"        # <dt> 1번째 = A
-    assert s19.date == "2099-07-04"
-
-
-def test_parse_ignores_full_rows():
-    """모든 칸이 '불가능'인 행은 0건."""
-    full = (
-        "<dl><dd>13:00~15:00</dd>"
-        "<dt><a href=\"#\"><img src=\"/images/sub/possible_icn_off.gif\" title=\"불가능\" /></a></dt>"
-        "<dt><a href=\"#\"><img src=\"/images/sub/possible_icn_off.gif\" title=\"불가능\" /></a></dt>"
-        "<dt><a href=\"#\"><img src=\"/images/sub/possible_icn_off.gif\" title=\"불가능\" /></a></dt>"
-        "</dl>"
-    )
-    assert parse_daechi(full) == []
-```
-
-- [ ] **Step 2: Run test to verify it fails**
-
-Run: `python -m pytest tests/test_daechi.py -v`
-Expected: FAIL — `ImportError: cannot import name 'parse_daechi' from 'src.daechi'` (또는 모듈 없음)
-
-- [ ] **Step 3: Write minimal implementation**
-
-`src/daechi.py`:
+`src/daechi.py` (현재 상태):
 ```python
 # src/daechi.py
 """대치유수지 테니스장 빈자리 조회 — 로그인 없는 HTML 파싱(전용 부품).
@@ -114,7 +56,6 @@ from src.models import Slot
 CENTER = "대치유수지"             # Slot.court(시설명)에 들어갈 이름
 COURTS = ["A코트", "B코트", "C코트"]  # 한 행 <dt> 순서 = 코트 순서
 
-# 한 시간대 행(<dl>) → 그 안의 코트 칸(<dt>) → 빈자리 단서(data-date/time + on)
 _ROW_RE = re.compile(r"<dl>(.*?)</dl>", re.DOTALL)
 _CELL_RE = re.compile(r"<dt>(.*?)</dt>", re.DOTALL)
 _DATE_RE = re.compile(r'data-date="(\d{4}-\d{2}-\d{2})"')
@@ -122,44 +63,30 @@ _TIME_RE = re.compile(r'data-time="(\d+)"')
 
 
 def parse_daechi(html):
-    """HTML에서 '가능'(빈자리) 칸만 Slot 목록으로.
-
-    각 <dl>(한 시간대 행)의 <dt> 1·2·3번째를 A·B·C 코트로 본다.
-    'possible_icn_on'이면서 data-date/data-time이 있는 칸만 빈자리로 뽑는다.
-    시작시각 = 7 + data-time*2 (0→07시 … 6→19시).
-    """
+    """HTML에서 '가능'(빈자리) 칸만 Slot 목록으로. 시작시각 = 7 + data-time*2."""
     slots = []
     for row in _ROW_RE.findall(html):
         for idx, cell in enumerate(_CELL_RE.findall(row)[:3]):  # 1·2·3 = A·B·C
             if "possible_icn_on" not in cell:
-                continue  # 불가능(찬) 칸 → 건너뜀
+                continue
             dm, tm = _DATE_RE.search(cell), _TIME_RE.search(cell)
             if not (dm and tm):
-                continue  # 날짜/시간 꼬리표 없으면 빈자리로 안 봄(안전)
+                continue
             hour = 7 + int(tm.group(1)) * 2
             slots.append(Slot(CENTER, COURTS[idx], dm.group(1), f"{hour:02d}:00"))
     return slots
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
-
-Run: `python -m pytest tests/test_daechi.py -v`
-Expected: PASS (2 passed)
-
-- [ ] **Step 5: Commit**
-
-```bash
-REPO="C:/Users/user/Desktop/gangnam-tennis-alert"
-git -C "$REPO" add src/daechi.py tests/test_daechi.py
-git -C "$REPO" commit -m "feat(daechi): 빈자리 칸 파싱(parse_daechi) 추가" -m "Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
-```
+- [x] 완료 — 테스트 2건 통과, 커밋 `9f15347`.
 
 ---
 
-## Task 2: `fetch_daechi_slots` — 조회 + 시간/미래 필터
+## Task 2: `fetch_daechi_slots` — 조회 + 시간/미래 필터 (순수 조회)
+
+> 이 함수는 **게이트를 모른다**(호출 빈도는 Task 5의 main이 통제). 순수 조회만.
 
 **Files:**
-- Modify: `src/daechi.py` (함수·상수 추가)
+- Modify: `src/daechi.py` (상수·함수 추가)
 - Modify: `tests/test_daechi.py` (테스트 추가)
 
 - [ ] **Step 1: Write the failing test**
@@ -178,17 +105,14 @@ def test_fetch_skips_when_disabled():
 def test_fetch_filters_time_and_drops_past(monkeypatch):
     """원하는 시각(매일 [7])만 + 미래만 남긴다. 과거·다른시각은 제외."""
     html = (
-        # 미래 07시(가능) — 통과 대상
         "<dl><dd>07:00~09:00</dd>"
         "<dt><a data-date=\"2099-07-04\" data-time=\"0\"><img src=\"possible_icn_on.gif\"></a></dt>"
         "<dt><a><img src=\"possible_icn_off.gif\"></a></dt>"
         "<dt><a><img src=\"possible_icn_off.gif\"></a></dt></dl>"
-        # 과거 07시(가능) — 미래 필터로 제외
         "<dl><dd>07:00~09:00</dd>"
         "<dt><a data-date=\"2000-01-01\" data-time=\"0\"><img src=\"possible_icn_on.gif\"></a></dt>"
         "<dt><a><img src=\"possible_icn_off.gif\"></a></dt>"
         "<dt><a><img src=\"possible_icn_off.gif\"></a></dt></dl>"
-        # 미래 09시(가능) — 시간 필터(매일 [7])로 제외
         "<dl><dd>09:00~11:00</dd>"
         "<dt><a data-date=\"2099-07-04\" data-time=\"1\"><img src=\"possible_icn_on.gif\"></a></dt>"
         "<dt><a><img src=\"possible_icn_off.gif\"></a></dt>"
@@ -198,7 +122,6 @@ def test_fetch_filters_time_and_drops_past(monkeypatch):
     class FakeResp:
         text = html
 
-    # 네트워크 차단: get은 항상 위 HTML. 달 루프 1회만(중복 방지) 돌도록 _months 고정.
     monkeypatch.setattr("requests.Session.get", lambda self, *a, **k: FakeResp())
     monkeypatch.setattr("src.daechi._months", lambda today: [(2099, 7)])
 
@@ -261,6 +184,7 @@ def fetch_daechi_slots(settings):
 
     settings: {"대치유수지": {받기, 평일/토/…}} 형태(설정표). 받기=False면 건너뜀.
     한 달 조회가 실패해도 다른 달은 계속(시설 전체가 죽지 않게).
+    호출 빈도(15분·08~24시)는 이 함수가 아니라 main의 게이트가 통제한다.
     """
     cfg = settings.get(CENTER)
     if not cfg or not cfg.get("받기"):
@@ -290,7 +214,7 @@ def fetch_daechi_slots(settings):
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `python -m pytest tests/test_daechi.py -v`
-Expected: PASS (5 passed)
+Expected: PASS (5 passed — Task 1의 2건 + 이번 3건)
 
 - [ ] **Step 5: Commit**
 
@@ -302,11 +226,175 @@ git -C "$REPO" commit -m "feat(daechi): 조회+시간/미래 필터(fetch_daechi
 
 ---
 
-## Task 3: 설정표 등록 + main 배선
+## Task 3: `is_daechi_due` — 조회 게이트(15분 + 08~24시)
+
+순수함수. "지금 대치유수지를 실제로 접속할 때인가?"만 판정한다.
+
+**Files:**
+- Modify: `src/daechi.py` (상수·함수 추가)
+- Modify: `tests/test_daechi.py` (테스트 추가)
+
+- [ ] **Step 1: Write the failing test**
+
+`tests/test_daechi.py` 끝에 추가:
+```python
+from datetime import datetime, timezone, timedelta
+from src.daechi import is_daechi_due
+
+_KST = timezone(timedelta(hours=9))
+
+
+def _at(h, mi=0):
+    """그 날 KST h시 mi분(테스트용 고정 시각)."""
+    return datetime(2026, 6, 24, h, mi, tzinfo=_KST)
+
+
+def test_due_dawn_is_false():
+    """새벽(03시)은 활동시간(08~24시) 밖 → 조회 안 함."""
+    assert is_daechi_due(_at(3), None) is False
+
+
+def test_due_midnight_is_false():
+    """자정(00시)도 활동시간 밖 → 조회 안 함."""
+    assert is_daechi_due(_at(0), None) is False
+
+
+def test_due_first_time_in_active_hours():
+    """활동시간(08시) + 첫 조회(last=None) → 조회."""
+    assert is_daechi_due(_at(8), None) is True
+
+
+def test_due_within_interval_is_false():
+    """활동시간이지만 마지막 조회 후 10분(15분 미만) → 조회 안 함."""
+    assert is_daechi_due(_at(8, 10), _at(8, 0)) is False
+
+
+def test_due_after_interval_is_true():
+    """마지막 조회 후 20분(15분 경과) → 조회."""
+    assert is_daechi_due(_at(8, 20), _at(8, 0)) is True
+
+
+def test_due_late_evening_is_true():
+    """23시는 아직 활동시간 안 → (첫 조회) 조회."""
+    assert is_daechi_due(_at(23), None) is True
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `python -m pytest tests/test_daechi.py -v`
+Expected: FAIL — `ImportError: cannot import name 'is_daechi_due'`
+
+- [ ] **Step 3: Write minimal implementation**
+
+`src/daechi.py`의 상수 영역(Task 2에서 만든 `TENNIS_TYPE` 아래)에 추가 — **`KST`는 Task 2에서 이미 정의했으니 재정의하지 말 것**:
+```python
+# 조회 게이트(매크로 빈번접속 공지 존중) — 빈도/활동시간은 코드 상수로 고정
+ACTIVE_START_HOUR = 8    # 조회 시작 시각(08시)
+ACTIVE_END_HOUR = 24     # 조회 끝(24시=자정) → now.hour < 24라 실질 08~23시
+FETCH_INTERVAL_MIN = 15  # 조회 최소 간격(분)
+```
+
+`src/daechi.py` 끝(`fetch_daechi_slots` 아래)에 추가:
+```python
+def is_daechi_due(now, last_fetch, interval_min=FETCH_INTERVAL_MIN):
+    """지금 대치유수지를 실제로 조회할 때인지 판정(순수함수).
+
+    실제 접속 조건 = ① 활동시간(KST 08~24시) 안 AND ② 마지막 조회 후 interval_min분 경과.
+    - 활동시간 밖(새벽 0~8시) → False (접속 안 함, 사이트 부담·공지 존중)
+    - 한 번도 조회 안 했으면(last_fetch=None) 활동시간 안일 때 True
+    now: KST aware datetime. last_fetch: datetime 또는 None.
+    """
+    if not (ACTIVE_START_HOUR <= now.hour < ACTIVE_END_HOUR):
+        return False
+    if last_fetch is None:
+        return True
+    return (now - last_fetch).total_seconds() >= interval_min * 60
+```
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `python -m pytest tests/test_daechi.py -v`
+Expected: PASS (11 passed — 누적 5건 + 이번 6건)
+
+- [ ] **Step 5: Commit**
+
+```bash
+REPO="C:/Users/user/Desktop/gangnam-tennis-alert"
+git -C "$REPO" add src/daechi.py tests/test_daechi.py
+git -C "$REPO" commit -m "feat(daechi): 조회 게이트 is_daechi_due(15분+08~24시) 추가" -m "Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
+```
+
+---
+
+## Task 4: 마지막 조회 시각 저장/로드 (`state.py`)
+
+**Files:**
+- Modify: `src/state.py` (함수 2개 추가)
+- Modify: `tests/test_state.py` (테스트 2개 추가)
+
+- [ ] **Step 1: Write the failing test**
+
+`tests/test_state.py` 끝에 추가:
+```python
+def test_대치유수지_조회시각_저장_불러오기(tmp_path):
+    """마지막 조회 시각(ISO 문자열)을 저장하고 그대로 다시 읽어야 함."""
+    from src.state import save_daechi_fetch_time, load_daechi_fetch_time
+    path = tmp_path / "daechi_fetch.json"
+    save_daechi_fetch_time(path, "2026-06-24T14:30:00+09:00")
+    assert load_daechi_fetch_time(path) == "2026-06-24T14:30:00+09:00"
+
+
+def test_없는_조회시각파일은_None(tmp_path):
+    """파일이 없으면(첫 실행) None — 아직 한 번도 조회 안 한 것으로 취급."""
+    from src.state import load_daechi_fetch_time
+    assert load_daechi_fetch_time(tmp_path / "none.json") is None
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `python -m pytest tests/test_state.py -v`
+Expected: FAIL — `ImportError: cannot import name 'save_daechi_fetch_time'`
+
+- [ ] **Step 3: Write minimal implementation**
+
+`src/state.py` 끝에 추가:
+```python
+def load_daechi_fetch_time(path):
+    """대치유수지 마지막 조회 시각(ISO 문자열). 파일이 없거나 깨졌으면 None(아직 조회 안 함)."""
+    p = Path(path)
+    if not p.exists():
+        return None
+    try:
+        return json.loads(p.read_text(encoding="utf-8")).get("at")
+    except Exception:
+        return None
+
+
+def save_daechi_fetch_time(path, iso_str) -> None:
+    """대치유수지 마지막 조회 시각(ISO 문자열)을 저장."""
+    Path(path).write_text(json.dumps({"at": iso_str}, ensure_ascii=False), encoding="utf-8")
+```
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `python -m pytest tests/test_state.py -v`
+Expected: PASS (기존 6건 + 이번 2건)
+
+- [ ] **Step 5: Commit**
+
+```bash
+REPO="C:/Users/user/Desktop/gangnam-tennis-alert"
+git -C "$REPO" add src/state.py tests/test_state.py
+git -C "$REPO" commit -m "feat(daechi): 마지막 조회 시각 저장/로드(state) 추가" -m "Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
+```
+
+---
+
+## Task 5: 설정표 등록 + main 배선(게이트로 조회 or 직전 유지)
 
 **Files:**
 - Modify: `settings.yaml` (블록 추가)
-- Modify: `src/main.py` (import + 호출 2곳)
+- Modify: `src/main.py` (import·상수·호출)
 - Modify: `tests/test_daechi.py` (설정/배선 확인 테스트)
 
 - [ ] **Step 1: Write the failing test**
@@ -317,118 +405,132 @@ def test_settings_has_daechi_block():
     """설정표(settings.yaml)에 대치유수지가 정상 형식으로 들어있다."""
     from src.settings_loader import load_settings
     settings, err = load_settings()
-    assert err is None                       # 형식 오류 없음
+    assert err is None
     assert settings["대치유수지"]["받기"] is True
     assert settings["대치유수지"]["평일"] == [19]
     assert settings["대치유수지"]["토"] == [7, 9, 19]
 
 
 def test_main_wires_daechi():
-    """main이 대치유수지 부품을 가져다 쓴다(배선 확인)."""
+    """main이 대치유수지 부품(조회·게이트)을 가져다 쓴다(배선 확인)."""
     import src.main as m
     assert hasattr(m, "fetch_daechi_slots")
+    assert hasattr(m, "is_daechi_due")
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `python -m pytest tests/test_daechi.py::test_settings_has_daechi_block tests/test_daechi.py::test_main_wires_daechi -v`
-Expected: FAIL — `KeyError: '대치유수지'` (설정 없음) / `AttributeError: ... 'fetch_daechi_slots'` (main 미배선)
+Expected: FAIL — `KeyError: '대치유수지'` / `AttributeError: ... 'is_daechi_due'`
 
 - [ ] **Step 3a: `settings.yaml` 끝에 블록 추가**
 
 ```yaml
 
-대치유수지:                  # 2시간 단위(07~09 … 19~21), 로그인 없음
+대치유수지:                  # 2시간 단위(07~09 … 19~21), 로그인 없음. 조회는 15분·08~24시(코드 상수)
   받기: true               # 끄려면 false 로만 바꾸면 끝
   평일: [19]               # 월~금: 저녁 7시(19~21)
   토: [7, 9, 19]           # 토요일: 오전 7·9시 + 저녁 7시
   # 일요일은 줄 없음 = 감시 안 함
 ```
 
-- [ ] **Step 3b: `src/main.py` import 추가**
+- [ ] **Step 3b: `src/main.py` import·상수 추가**
 
-`from src.esongpa import fetch_esongpa_slots` 아래 줄에:
+`from src.esongpa import fetch_esongpa_slots` 아래에:
 ```python
-from src.daechi import fetch_daechi_slots
+from src.daechi import fetch_daechi_slots, is_daechi_due, KST
 ```
 
-- [ ] **Step 3c: `run_vacancy_alert()`에 호출 추가**
+기존 `from src.state import (...)`에 `save_daechi_fetch_time, load_daechi_fetch_time`를 추가하고, 파일 상단에 `from datetime import datetime`을 추가(이미 없으면).
+
+상수 영역(`READ_FAIL_PATH` 부근)에 추가:
+```python
+DAECHI_SLOTS_PATH = "daechi_slots.json"   # 대치유수지 직전 빈자리(박제)
+DAECHI_TIME_PATH = "daechi_fetch.json"    # 대치유수지 마지막 조회 시각
+```
+
+- [ ] **Step 3c: `run_vacancy_alert()`에 게이트 블록 추가**
 
 `save_failures(FAIL_PATH, failures)` **바로 위**(esongpa try/except 다음)에 삽입:
 ```python
-    # 대치유수지(로그인 없음) — 실패해도 다른 시설 알림은 계속 + 실패 누적
-    try:
-        wanted += fetch_daechi_slots(settings)
-    except Exception as e:
-        failures["대치유수지"] = failures.get("대치유수지", 0) + 1
-        print(f"[대치유수지 조회 실패] {e}")
+    # 대치유수지 — 15분 간격 + 08~24시에만 실제 접속(매크로 빈번접속 공지 존중).
+    # 그 외 실행에선 직전에 박제한 빈자리를 그대로 유지(가짜 변동 알림 방지).
+    now = datetime.now(KST)
+    last_str = load_daechi_fetch_time(DAECHI_TIME_PATH)
+    last_dt = datetime.fromisoformat(last_str) if last_str else None
+    if is_daechi_due(now, last_dt):
+        try:
+            daechi_slots = fetch_daechi_slots(settings)
+            save_slots(DAECHI_SLOTS_PATH, daechi_slots)            # 결과 박제
+            save_daechi_fetch_time(DAECHI_TIME_PATH, now.isoformat())
+            wanted += daechi_slots
+        except Exception as e:
+            failures["대치유수지"] = failures.get("대치유수지", 0) + 1
+            wanted += load_slots(DAECHI_SLOTS_PATH)                # 실패 시 직전 유지
+            print(f"[대치유수지 조회 실패] {e}")
+    else:
+        wanted += load_slots(DAECHI_SLOTS_PATH)                    # 시간창 밖/15분 미경과 → 직전 유지
 ```
 
-- [ ] **Step 3d: `run_summary()`에 호출 추가**
+- [ ] **Step 3d: `run_summary()`에 직전 결과 합류 추가**
 
-`run_summary()`의 esongpa try/except 다음, `failures = load_failures(FAIL_PATH)` **위**에 삽입:
+`run_summary()`의 esongpa try/except 다음, `failures = load_failures(FAIL_PATH)` **위**에 삽입(요약은 새로 접속하지 않고 박제본만 사용):
 ```python
-    try:
-        wanted += fetch_daechi_slots(settings)   # 대치유수지(요약에도 합류)
-    except Exception as e:
-        print(f"[요약-대치유수지 조회 실패] {e}")
+    wanted += load_slots(DAECHI_SLOTS_PATH)   # 대치유수지: 직전 박제 빈자리(요약은 접속 안 함)
 ```
 
 - [ ] **Step 4: Run tests (대상 + 전체)**
 
 Run: `python -m pytest tests/test_daechi.py -v`
-Expected: PASS (7 passed)
+Expected: PASS (13 passed)
 
 Run: `python -m pytest -q`
-Expected: 기존 테스트 전부 PASS + 신규 7건 PASS (실패 0)
+Expected: 기존 + 신규 전부 PASS (실패 0). `python -c "import src.main"`도 오류 없어야 함.
 
 - [ ] **Step 5: Commit**
 
 ```bash
 REPO="C:/Users/user/Desktop/gangnam-tennis-alert"
 git -C "$REPO" add settings.yaml src/main.py tests/test_daechi.py
-git -C "$REPO" commit -m "feat(daechi): 설정표 등록 + main 빈자리/요약 흐름에 합류" -m "Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
+git -C "$REPO" commit -m "feat(daechi): 설정표 등록 + main 게이트 배선(조회 or 직전유지)" -m "Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ```
 
 ---
 
-## Task 4: 실제 조회 검증 + README
+## Task 6: 실측 검증 + README
 
 **Files:**
 - Modify: `README.md`
-- (검증 전용, 코드 변경 없음 — 실제 사이트 1회 조회)
+- (검증 — 네트워크는 최소 1회만)
 
-- [ ] **Step 1: 실제 사이트 파싱 검증 (네트워크)**
+- [ ] **Step 1: 저장된 실측 HTML로 파싱 검증 (네트워크 0)**
 
-Run:
+조사 때 저장해 둔 실측 페이지로 `parse_daechi`가 빈자리를 뽑는지 확인(접속 안 함):
 ```bash
-cd "C:/Users/user/Desktop/gangnam-tennis-alert"
-python -c "from src.daechi import fetch_daechi_slots; \
-s=fetch_daechi_slots({'대치유수지':{'받기':True,'매일':[7,9,11,13,15,17,19]}}); \
-print('빈자리', len(s), '건'); \
+python -c "import tempfile, os; from src.daechi import parse_daechi; \
+html=open(os.path.join(tempfile.gettempdir(),'daechi.html'),encoding='utf-8').read(); \
+s=parse_daechi(html); print('파싱 빈자리', len(s), '건'); \
 [print(x.place, x.date, x.time) for x in s[:10]]"
 ```
-Expected: 오류 없이 `빈자리 N 건` 출력(미래 날짜의 A/B/C코트·시각). 0건이어도 **오류 없이** 끝나면 정상(그 시점 빈자리가 없을 뿐). `data-time=6`(19시)이 실제로 잡히는지 출력에서 확인.
+Expected: `파싱 빈자리 N 건`과 A/B/C코트·날짜·시각 출력. **19시(`19:00`)가 한 건이라도 있으면 `data-time=6` 매핑 실증.** (저장본이 없으면 이 단계는 건너뛰고 Step 2로.)
 
-> 만약 예외/0건이 의심되면: `python C:/Users/user/AppData/Local/Temp/analyze_daechi.py`로 저장본 구조와 대조하고, `data-time`/`<dt>` 순서 가정이 실제 응답과 맞는지 점검한다.
+- [ ] **Step 2: 실제 조회 1회만 동작 확인 (네트워크 1회)**
 
-- [ ] **Step 2: 설정대로 동작 확인 (평일 19 / 토 7·9·19)**
-
-Run:
+게이트를 거치지 않고 `fetch_daechi_slots`를 직접 1회 호출(공지 존중: 검증은 1회만):
 ```bash
-cd "C:/Users/user/Desktop/gangnam-tennis-alert"
 python -c "from src.daechi import fetch_daechi_slots; from src.settings_loader import load_settings; \
 st,_=load_settings(); s=fetch_daechi_slots(st); \
 print('설정대로 빈자리', len(s), '건'); \
 [print(x.place, x.date, x.time) for x in s[:10]]"
 ```
-Expected: 오류 없이 출력. 나오는 시각이 모두 19시(평일) 또는 7·9·19시(토)인지, 일요일은 없는지 눈으로 확인.
+Expected: 오류 없이 출력. 나오는 시각이 모두 19시(평일) 또는 7·9·19시(토)이고 일요일은 없는지 눈으로 확인. 0건이어도 오류 없이 끝나면 정상.
 
 - [ ] **Step 3: `README.md` 감시 대상에 추가**
 
 `- 감시 대상: 포이 테니스장, 강남세곡체육공원 테니스장` 줄을 아래로 교체:
 ```markdown
 - 감시 대상: 포이·강남세곡 테니스장, 송파·잠실(유수지) 테니스장, 대치유수지 테니스장
+- 대치유수지: 사이트 공지(매크로 제한)에 따라 15분 간격·한국시간 08~24시에만 조회
 ```
 
 - [ ] **Step 4: 전체 테스트 최종 확인**
@@ -441,19 +543,20 @@ Expected: 전부 PASS(실패 0)
 ```bash
 REPO="C:/Users/user/Desktop/gangnam-tennis-alert"
 git -C "$REPO" add README.md
-git -C "$REPO" commit -m "docs(daechi): README 감시 대상에 대치유수지 추가" -m "Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
+git -C "$REPO" commit -m "docs(daechi): README 감시 대상+저빈도 안내 추가" -m "Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ```
 
 ---
 
 ## 완료 기준(Definition of Done)
 
-- [ ] `python -m pytest -q` 전부 통과(신규 7건 포함)
-- [ ] 실제 사이트 조회가 오류 없이 동작(Task 4 Step 1·2)
-- [ ] `data-time=6`(19시) 매핑이 실데이터에서 확인됨
+- [ ] `python -m pytest -q` 전부 통과(신규 포함)
+- [ ] `parse_daechi`가 실측 HTML에서 19시(`data-time=6`)까지 정확히 추출
+- [ ] `is_daechi_due`가 새벽 False / 08~23시 True / 15분 미경과 False로 동작
+- [ ] main이 게이트로 "조회 or 직전 유지"를 분기(접속은 15분·08~24시에만)
 - [ ] 기존 부품(`fetcher.py`·`esongpa.py`·`filters.py`·`notifier.py`) 무수정
-- [ ] (배포는 별도) GitHub로 push 전 사용자 승인 — push해야 실제 가동
+- [ ] (배포는 별도) GitHub push 전 사용자 승인 — push해야 실제 가동
 
 ## 후속(이번 범위 밖)
-- 알림 끝 예약 링크는 강남 1개 공용 유지(여러 시설 섞일 때 시설별 링크는 추후).
-- 실측 HTML을 fixture 파일로 박제하는 통합 테스트는 선택(현재 인라인 축약본으로 충분).
+- 알림 끝 예약 링크는 강남 1개 공용 유지(시설별 링크는 추후).
+- 빈도/시간창을 settings.yaml로 빼는 것은 YAGNI(지금은 코드 상수로 충분).
