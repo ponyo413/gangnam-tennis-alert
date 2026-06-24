@@ -140,3 +140,23 @@ def test_due_after_interval_is_true():
 def test_due_late_evening_is_true():
     """23시는 아직 활동시간 안 → (첫 조회) 조회."""
     assert is_daechi_due(_at(23), None) is True
+
+
+# ──────────────────────────────────────────────
+# Task 5: 설정표 등록 + main 배선 확인
+# ──────────────────────────────────────────────
+def test_settings_has_daechi_block():
+    """설정표(settings.yaml)에 대치유수지가 정상 형식으로 들어있다."""
+    from src.settings_loader import load_settings
+    settings, err = load_settings()
+    assert err is None
+    assert settings["대치유수지"]["받기"] is True
+    assert settings["대치유수지"]["평일"] == [19]
+    assert settings["대치유수지"]["토"] == [7, 9, 19]
+
+
+def test_main_wires_daechi():
+    """main이 대치유수지 부품(조회·게이트)을 가져다 쓴다(배선 확인)."""
+    import src.main as m
+    assert hasattr(m, "fetch_daechi_slots")
+    assert hasattr(m, "is_daechi_due")

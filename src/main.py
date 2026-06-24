@@ -5,22 +5,27 @@
 빈자리 현황이 직전과 달라지면(추가·삭제 무관) 현재 전체 현황을 알린다.
 """
 import sys
+from datetime import datetime
 from pathlib import Path
 
 from src.fetcher import fetch_slots, fetch_facility_status
 from src.esongpa import fetch_esongpa_slots
+from src.daechi import fetch_daechi_slots, is_daechi_due, KST
 from src.filters import is_wanted_for
 from src.settings_loader import load_settings
 from src.differ import has_changed, find_opened
 from src.notifier import send_telegram, format_application_message, format_summary
 from src.state import (load_slots, save_slots, load_status, save_status,
-                       load_failures, save_failures, load_fail_count, save_fail_count)
+                       load_failures, save_failures, load_fail_count, save_fail_count,
+                       load_daechi_fetch_time, save_daechi_fetch_time)
 from src.config import STATUS_PATH
 
 STATE_PATH = "state.json"      # 직전 빈자리 기록
 FAIL_PATH = "failures.json"    # 시설별 조회 실패 횟수(요약 때 보고 후 리셋)
 READ_FAIL_PATH = "read_fail.json"   # 강남 조회 '연속' 실패 횟수(산발 끊김 무시용)
 READ_FAIL_THRESHOLD = 3             # 연속 3회(=약 15분)부터 '사이트 다운'으로 보고 알림
+DAECHI_SLOTS_PATH = "daechi_slots.json"   # 대치유수지 직전 빈자리(박제)
+DAECHI_TIME_PATH = "daechi_fetch.json"    # 대치유수지 마지막 조회 시각
 
 
 def read_fail_decision(prev_count, success, threshold=READ_FAIL_THRESHOLD):
@@ -72,6 +77,23 @@ def run_vacancy_alert():
     except Exception as e:
         failures["esongpa"] = failures.get("esongpa", 0) + 1
         print(f"[esongpa 조회 실패] {e}")
+    # 대치유수지 — 15분 간격 + 08~24시에만 실제 접속(매크로 빈번접속 공지 존중).
+    # 그 외 실행에선 직전에 박제한 빈자리를 그대로 유지(가짜 변동 알림 방지).
+    now = datetime.now(KST)
+    last_str = load_daechi_fetch_time(DAECHI_TIME_PATH)
+    last_dt = datetime.fromisoformat(last_str) if last_str else None
+    if is_daechi_due(now, last_dt):
+        try:
+            daechi_slots = fetch_daechi_slots(settings)
+            save_slots(DAECHI_SLOTS_PATH, daechi_slots)            # 결과 박제
+            save_daechi_fetch_time(DAECHI_TIME_PATH, now.isoformat())
+            wanted += daechi_slots
+        except Exception as e:
+            failures["대치유수지"] = failures.get("대치유수지", 0) + 1
+            wanted += load_slots(DAECHI_SLOTS_PATH)                # 실패 시 직전 유지
+            print(f"[대치유수지 조회 실패] {e}")
+    else:
+        wanted += load_slots(DAECHI_SLOTS_PATH)                    # 시간창 밖/15분 미경과 → 직전 유지
     save_failures(FAIL_PATH, failures)
 
     is_first = not Path(STATE_PATH).exists()
@@ -123,6 +145,7 @@ def run_summary():
         wanted += fetch_esongpa_slots(settings, previous)  # 송파·잠실(설정 기반, 닫힘 시 직전 유지)
     except Exception as e:
         print(f"[요약-esongpa 조회 실패] {e}")
+    wanted += load_slots(DAECHI_SLOTS_PATH)   # 대치유수지: 직전 박제 빈자리(요약은 접속 안 함)
     failures = load_failures(FAIL_PATH)
     send_telegram(format_summary(wanted, failures=failures))
     save_failures(FAIL_PATH, {})  # 보고 후 실패 카운트 리셋
