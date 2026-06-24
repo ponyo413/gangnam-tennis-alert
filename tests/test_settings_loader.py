@@ -32,7 +32,27 @@ def test_시간이_숫자목록_아니면_오류():
 
 def test_이상한_요일키_오류():
     with pytest.raises(ValueError):
-        validate_settings({"강남": {"받기": True, "주말": [19]}})
+        validate_settings({"강남": {"받기": True, "토토": [19]}})  # 없는 키('평일'·'주말'은 이제 유효)
+
+
+def test_평일_주말_코트추가_허용():
+    """묶음 키(평일/주말)와 코트추가 섹션은 유효한 설정이다(안 던짐)."""
+    data = {"강남": {"받기": True, "매일": [19, 20, 21],
+                     "평일": [7], "주말": [12],
+                     "코트추가": {"포이 코트A": {"평일": [7]},
+                                  "세곡 2번코트": {"주말": [12, 13]}}}}
+    assert validate_settings(data) == data
+
+
+def test_코트추가_시간이_숫자목록_아니면_오류():
+    with pytest.raises(ValueError):
+        validate_settings({"강남": {"받기": True,
+                                    "코트추가": {"포이 코트A": {"평일": "아침"}}}})
+
+
+def test_코트추가가_표가_아니면_오류():
+    with pytest.raises(ValueError):
+        validate_settings({"강남": {"받기": True, "코트추가": [1, 2, 3]}})
 
 
 def test_형식틀리면_직전정상으로_폴백(tmp_path):

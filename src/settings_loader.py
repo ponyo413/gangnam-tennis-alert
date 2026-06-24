@@ -20,6 +20,19 @@ DEFAULT_SETTINGS = {
 WEEKDAY_KEYS = ["월", "화", "수", "목", "금", "토", "일"]
 
 
+# 시간 설정에 쓸 수 있는 키: 요일(월~일) + 매일 + 평일/주말 묶음
+TIME_KEYS = set(WEEKDAY_KEYS) | {"매일", "평일", "주말"}
+
+
+def _validate_time_block(label, cfg):
+    """시간 설정 한 덩어리(요일/매일/평일/주말 → 숫자 목록)를 검증한다."""
+    for key, val in cfg.items():
+        if key not in TIME_KEYS:
+            raise ValueError(f"'{label}'의 '{key}'는 요일(월~일)·매일·평일·주말이어야 합니다")
+        if not (isinstance(val, list) and all(isinstance(h, int) for h in val)):
+            raise ValueError(f"'{label} {key}'의 시간은 숫자 목록이어야 합니다(예: [19, 20])")
+
+
 def validate_settings(data):
     """설정 dict가 올바른 형식인지 검사. 틀리면 ValueError를 던진다."""
     if not isinstance(data, dict):
@@ -32,8 +45,18 @@ def validate_settings(data):
         for key, val in cfg.items():
             if key == "받기":
                 continue
-            if key not in WEEKDAY_KEYS and key != "매일":
-                raise ValueError(f"'{fac}'의 '{key}'는 요일(월~일) 또는 '매일'이어야 합니다")
+            if key == "코트추가":
+                # 코트추가: {"포이 코트A": {시간설정}, ...} 형태의 표
+                if not isinstance(val, dict):
+                    raise ValueError(f"'{fac}'의 '코트추가'는 코트별 표여야 합니다")
+                for court, court_cfg in val.items():
+                    if not isinstance(court_cfg, dict):
+                        raise ValueError(f"'{fac} 코트추가 {court}'는 표 형식이어야 합니다")
+                    _validate_time_block(f"{fac} 코트추가 {court}", court_cfg)
+                continue
+            # 그 외는 시간 키(요일/매일/평일/주말)여야 함
+            if key not in TIME_KEYS:
+                raise ValueError(f"'{fac}'의 '{key}'는 요일(월~일)·매일·평일·주말·코트추가여야 합니다")
             if not (isinstance(val, list) and all(isinstance(h, int) for h in val)):
                 raise ValueError(f"'{fac} {key}'의 시간은 숫자 목록이어야 합니다(예: [19, 20])")
     return data
