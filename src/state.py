@@ -66,3 +66,19 @@ def load_fail_count(path) -> int:
 def save_fail_count(path, count: int) -> None:
     """강남 조회 '연속 실패' 횟수를 저장."""
     Path(path).write_text(json.dumps({"count": count}, ensure_ascii=False), encoding="utf-8")
+
+
+def load_daechi_fetch_time(path):
+    """대치유수지 마지막 조회 시각(ISO 문자열). 파일이 없거나 깨졌으면 None(아직 조회 안 함)."""
+    p = Path(path)
+    if not p.exists():
+        return None
+    try:
+        return json.loads(p.read_text(encoding="utf-8")).get("at")
+    except Exception:
+        return None
+
+
+def save_daechi_fetch_time(path, iso_str) -> None:
+    """대치유수지 마지막 조회 시각(ISO 문자열)을 저장."""
+    Path(path).write_text(json.dumps({"at": iso_str}, ensure_ascii=False), encoding="utf-8")

@@ -42,3 +42,17 @@ def test_없는_카운트파일은_0(tmp_path):
     """카운트 파일이 없으면(첫 실행) 0으로 시작."""
     from src.state import load_fail_count
     assert load_fail_count(tmp_path / "none.json") == 0
+
+
+def test_대치유수지_조회시각_저장_불러오기(tmp_path):
+    """마지막 조회 시각(ISO 문자열)을 저장하고 그대로 다시 읽어야 함."""
+    from src.state import save_daechi_fetch_time, load_daechi_fetch_time
+    path = tmp_path / "daechi_fetch.json"
+    save_daechi_fetch_time(path, "2026-06-24T14:30:00+09:00")
+    assert load_daechi_fetch_time(path) == "2026-06-24T14:30:00+09:00"
+
+
+def test_없는_조회시각파일은_None(tmp_path):
+    """파일이 없으면(첫 실행) None — 아직 한 번도 조회 안 한 것으로 취급."""
+    from src.state import load_daechi_fetch_time
+    assert load_daechi_fetch_time(tmp_path / "none.json") is None
