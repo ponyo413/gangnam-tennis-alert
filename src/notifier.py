@@ -1,10 +1,24 @@
 """텔레그램으로 빈자리 알림을 보낸다. (1) 메시지 만들기 (2) 실제 발송."""
+from datetime import date
+
 import requests
 from src.models import Slot
 from src.config import TELEGRAM_TOKEN, TELEGRAM_CHAT_ID, RESERVE_URL
 
 # 한 메시지에 빈자리를 너무 많이 담지 않도록 제한
 MAX_LINES = 10
+
+# 요일 한글 — date.weekday()는 0(월)~6(일) 순서
+_WEEKDAYS_KR = "월화수목금토일"
+
+
+def _with_weekday(iso_date):
+    """ "2026-07-05" → "2026-07-05(일)". 날짜 형식이 이상하면 원본을 그대로 돌려준다(안전)."""
+    try:
+        y, m, d = (int(x) for x in iso_date.split("-"))
+        return f"{iso_date}({_WEEKDAYS_KR[date(y, m, d).weekday()]})"
+    except (ValueError, TypeError):
+        return iso_date
 
 
 def format_message(slots: list[Slot]) -> str:
@@ -17,7 +31,7 @@ def format_message(slots: list[Slot]) -> str:
 
     lines = ["🎾 빈자리 발견!"]
     for s in slots[:MAX_LINES]:
-        lines.append(f"🏟 {s.court}테니스장 {s.place}  📅 {s.date} {s.time}")
+        lines.append(f"🏟 {s.court}테니스장 {s.place}  📅 {_with_weekday(s.date)} {s.time}")
     if len(slots) > MAX_LINES:
         lines.append(f"…외 {len(slots) - MAX_LINES}건")
     lines.append(f"👉 지금 예약: {RESERVE_URL}")
@@ -59,7 +73,7 @@ def format_summary(slots: list[Slot], failures: dict | None = None,
     else:
         lines = [title]
         for s in sorted(slots, key=lambda x: (x.court, x.date, x.time)):
-            lines.append(f"🏟 {s.court} {s.place}  📅 {s.date} {s.time}")
+            lines.append(f"🏟 {s.court} {s.place}  📅 {_with_weekday(s.date)} {s.time}")
         lines.append(f"👉 예약: {RESERVE_URL}")
     if failures:  # 어제 조회 실패가 있었으면 한 줄 보고
         detail = ", ".join(f"{k} {v}번" for k, v in failures.items())

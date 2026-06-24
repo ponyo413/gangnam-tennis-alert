@@ -66,3 +66,16 @@ def test_summary_제목_바꿀수있다():
     msg = format_summary([], title="🔔 빈자리 현황이 바뀌었어요")
     assert "🔔 빈자리 현황이 바뀌었어요" in msg
     assert "오늘의 빈자리 현황" not in msg
+
+
+# ── 날짜 옆 한글 요일 표기 (예: 2026-07-05(일)) ──────────────
+def test_summary에_요일이_함께_표기된다():
+    """빈자리 현황 메시지의 날짜에 한글 요일이 붙는다 — 2026-07-05(일)."""
+    msg = format_summary([Slot("세곡", "2번코트", "2026-07-05", "20:00")])
+    assert "2026-07-05(일)" in msg
+
+
+def test_message에도_요일이_함께_표기된다():
+    """새 빈자리 메시지(format_message)도 동일하게 요일을 붙인다 — 2026-07-04(토)."""
+    msg = format_message([Slot("세곡", "4번코트", "2026-07-04", "21:00")])
+    assert "2026-07-04(토)" in msg
