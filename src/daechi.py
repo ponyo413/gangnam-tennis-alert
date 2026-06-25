@@ -20,6 +20,7 @@ HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                          "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36"}
 BASE = "https://www.xn--vk1b79znxd34c61h.kr/"  # 대치유수지.kr(퓨니코드)
 TENNIS_TYPE = "8"  # type=8 = 테니스장(7=축구장 등 다른 종목)
+REQUEST_TIMEOUT = 8  # 한 요청 최대 기다림(초)
 
 # 조회 게이트(매크로 빈번접속 공지 존중) — 빈도/활동시간은 코드 상수로 고정
 ACTIVE_START_HOUR = 8    # 조회 시작 시각(08시)
@@ -87,7 +88,7 @@ def fetch_daechi_slots(settings):
                 "type": TENNIS_TYPE,
                 "cyear": year,
                 "cmonth": month,
-            }, timeout=20)
+            }, timeout=REQUEST_TIMEOUT)
             for slot in parse_daechi(r.text):
                 slot_dt = datetime.strptime(slot.date + slot.time,
                                             "%Y-%m-%d%H:%M").replace(tzinfo=KST)

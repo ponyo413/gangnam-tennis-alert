@@ -21,6 +21,9 @@ KST = timezone(timedelta(hours=9))
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                          "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36"}
 
+# 한 요청 최대 기다림(초). 로그인+조회가 직렬이라 짧게 잡아 누적 지연을 막는다.
+REQUEST_TIMEOUT = 8
+
 # 빈자리(예약가능) 한 칸: <li>HH:MM~HH:MM<span class='status_y'>...('코트','날짜')...예약가능
 _SLOT_RE = re.compile(
     r"<li>(\d{2}:\d{2})~\d{2}:\d{2}<span class='status_y'>"
@@ -47,7 +50,7 @@ def _login(session, base):
         return False
     session.post(base + "/bbs/login_check.php",
                  data={"mb_id": user, "mb_password": pw, "url": base + "/"},
-                 verify=False, timeout=20)
+                 verify=False, timeout=REQUEST_TIMEOUT)
     return any(c.name == "PHPSESSID" for c in session.cookies)
 
 
@@ -111,7 +114,7 @@ def fetch_esongpa_slots(settings, previous_slots=()):
             pages = []        # 이 시설의 모든 달 HTML — '접수 닫힘' 판정에 쓴다
             for ym in _months(now.date()):
                 url = site["base"] + "/page/rent/" + site["list_page"]
-                r = session.get(url, params={"sch_sym": ym}, verify=False, timeout=20)
+                r = session.get(url, params={"sch_sym": ym}, verify=False, timeout=REQUEST_TIMEOUT)
                 pages.append(r.text)
                 for slot in parse_esongpa(r.text, center):
                     slot_dt = datetime.strptime(slot.date + slot.time, "%Y-%m-%d%H:%M").replace(tzinfo=KST)

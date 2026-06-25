@@ -32,6 +32,10 @@ KST = timezone(timedelta(hours=9))
 # 호출 사이 간격(초) — 사이트에 부담 주지 않게 예의를 지킴
 POLITE_DELAY = 0.3
 
+# 한 요청 최대 기다림(초). 강남은 코트가 많아 요청 수가 많으므로 짧게 잡아,
+# 느린 순간에도 전체 실행이 7분 안전장치를 넘기지 않게 한다.
+REQUEST_TIMEOUT = 6
+
 
 def month_base_dates(today):
     """이번달(오늘)과 다음달 1일의 YYYYMMDD 두 개를 돌려준다.
@@ -86,7 +90,7 @@ def _fetch_json(session, url, comcd, part, place, base_date):
         "place_code": place,
         "base_date": base_date,
         "rent_type": "",
-    }, timeout=10)
+    }, timeout=REQUEST_TIMEOUT)
     resp.raise_for_status()
     return resp.json()
 
@@ -150,7 +154,7 @@ def fetch_facility_status():
                 "company_code": f["comcd"],
                 "part_code": f["part"],
                 "place_code": f["place"],
-            }, timeout=10)
+            }, timeout=REQUEST_TIMEOUT)
             resp.raise_for_status()
             result[f["name"]] = parse_status(resp.json())
         except Exception as e:

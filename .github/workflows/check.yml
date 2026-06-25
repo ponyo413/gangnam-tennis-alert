@@ -32,7 +32,8 @@ jobs:
           restore-keys: tennis-state-v4-
 
       - name: 빈자리 점검 실행
-        timeout-minutes: 7      # 사이트 완전 다운 시 재시도로 무한정 매달리지 않게 상한(평소 30초, 최악 ~5.5분)
+        timeout-minutes: 7      # 무한정 매달리지 않게 상한(평소 30초; 모든 사이트 동시 먹통 극단엔 7분 근접 가능 → 아래 continue-on-error가 메일 차단)
+        continue-on-error: true # 혹시 7분을 넘겨 강제 종료돼도 '실패'로 기록하지 않음(run failed 메일 방지). 봇 멈춤은 healthchecks가 따로 감시.
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
