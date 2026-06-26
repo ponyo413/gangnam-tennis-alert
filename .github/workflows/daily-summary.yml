@@ -19,6 +19,9 @@ jobs:
       - name: 라이브러리 설치
         run: pip install -r requirements.txt
       # 5분 점검(check.yml)이 쌓은 실패 카운트를 같은 캐시에서 읽어와 요약에 보고.
+      # 캐시 목록을 check.yml과 똑같이 맞춘다 — 두 워크플로가 같은 캐시(tennis-state-v4)를 공유하므로,
+      # 여기서 한 파일이라도 빠뜨리면 이 워크플로가 cache를 저장할 때 그 파일이 누락되고,
+      # 다음 check.yml이 그 캐시를 복원할 때 초기화된다(daechi_*=15분 게이트·직전 박제, read_fail=연속실패 카운트).
       - name: 직전 기록 복원(실패 카운트 공유)
         uses: actions/cache@v4
         with:
@@ -26,7 +29,10 @@ jobs:
             state.json
             status.json
             failures.json
+            read_fail.json
             summary_sent.json
+            daechi_slots.json
+            daechi_fetch.json
           key: tennis-state-v4-${{ github.run_id }}
           restore-keys: tennis-state-v4-
       - name: 빈자리 요약 발송

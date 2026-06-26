@@ -27,6 +27,8 @@ jobs:
         run: pip install -r requirements.txt
 
       # 직전 실행이 남긴 기록 불러오기 (없으면 그냥 첫 실행으로 시작)
+      # 대치유수지(daechi_*)도 포함 — 빠지면 매 실행 초기화돼 15분 조회 게이트가 풀려
+      # 5분마다 접속(매크로 금지 위반)하고, 직전 빈자리 박제가 사라져 가짜 변동 알림이 난다.
       - name: 직전 기록 복원
         uses: actions/cache@v4
         with:
@@ -36,6 +38,8 @@ jobs:
             failures.json
             read_fail.json
             summary_sent.json
+            daechi_slots.json
+            daechi_fetch.json
           key: tennis-state-v4-${{ github.run_id }}
           restore-keys: tennis-state-v4-
 
