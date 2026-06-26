@@ -147,8 +147,12 @@ def run_application_alert():
     save_status(STATUS_PATH, status)
 
 
-def run_summary():
-    """매일 1회: 현재 '원하는 시간대' 빈자리 전체 + 어제 실패를 요약 발송(직전기록 불필요)."""
+def run_summary() -> bool:
+    """매일 1회: 현재 '원하는 시간대' 빈자리 전체 + 어제 실패를 요약 발송(직전기록 불필요).
+
+    반환: 텔레그램 발송에 성공하면 True, 거부(429 등)되면 False.
+    이 값을 보고 maybe_send_daily_summary가 '오늘 보냄 도장'을 찍을지 정한다(실패 시 재시도).
+    """
     settings, err = load_settings()
     if err:
         send_telegram(f"⚠️ {err}")
@@ -165,13 +169,16 @@ def run_summary():
         print(f"[요약-esongpa 조회 실패] {e}")
     wanted += load_slots(DAECHI_SLOTS_PATH)   # 대치유수지: 직전 박제 빈자리(요약은 접속 안 함)
     failures = load_failures(FAIL_PATH)
-    send_telegram(format_summary(wanted, failures=failures))
-    save_failures(FAIL_PATH, {})  # 보고 후 실패 카운트 리셋
-    print(f"[요약 발송] {len(wanted)}건, 실패 {sum(failures.values())}건")
+    # 텔레그램이 거부하면(429 등) send_telegram이 False를 돌려준다 → '보고 실패'로 본다.
+    sent = send_telegram(format_summary(wanted, failures=failures))
+    if sent:
+        save_failures(FAIL_PATH, {})  # 정상 보고했을 때만 실패 카운트 리셋(실패 시 보존해 다음에 보고)
+    print(f"[요약 발송] {len(wanted)}건, 실패 {sum(failures.values())}건, 발송 {'성공' if sent else '실패'}")
+    return sent
 
 
 def maybe_send_daily_summary(now):
-    """그날 '8시 이후 첫' 점검이면 일일 요약을 1통 보내고 '보낸 날짜'를 도장 찍는다.
+    """그날 '8시 이후 첫' 점검이면 일일 요약을 1통 보내고, 발송 성공 시에만 '보낸 날짜'를 도장 찍는다.
 
     제시간에 도는 '5분 점검'에 얹었으므로 평소엔 요약이 08:00~08:05 안에 나간다
     (GitHub 무료 예약타이머가 1시간씩 늦잠 자던 문제를 우회). 하루 딱 한 번만 발송하며,
@@ -179,20 +186,24 @@ def maybe_send_daily_summary(now):
     """
     last_sent = load_summary_date(SUMMARY_PATH)        # 마지막으로 보낸 날짜(없으면 None)
     if should_send_summary(now, last_sent):
-        run_summary()                                  # 현재 빈자리 전체 + 어제 실패 요약 1통
-        save_summary_date(SUMMARY_PATH, now.date().isoformat())  # 오늘 보냄 도장(중복 방지)
-        print(f"[일일 요약 발송] {now.date().isoformat()} 그날 첫 점검")
+        # 발송에 성공(True)했을 때만 '오늘 보냄' 도장을 찍는다.
+        # 실패하면(텔레그램 거부) 도장을 안 찍어 다음 5분 점검에서 다시 시도한다(요약 빵꾸 방지).
+        if run_summary():
+            save_summary_date(SUMMARY_PATH, now.date().isoformat())  # 오늘 보냄 도장(중복 방지)
+            print(f"[일일 요약 발송] {now.date().isoformat()} 그날 첫 점검")
+        else:
+            print("[일일 요약 발송 실패] 도장 안 찍음 — 다음 점검에서 재시도")
 
 
 def main() -> int:
     # 인자 'summary' → 일일 요약, 그 외 → 빈자리 변동/신청 감시
     mode = sys.argv[1] if len(sys.argv) > 1 else "watch"
     if mode == "summary":
-        run_summary()
-    else:
-        run_vacancy_alert()
-        run_application_alert()
-        maybe_send_daily_summary(datetime.now(KST))  # 아침 8시 이후 그날 첫 점검이면 일일 요약도 함께
+        # 수동 요약 모드: 발송 성공이면 0, 실패면 1로 종료해 GitHub Actions가 실패를 감지하게 한다
+        return 0 if run_summary() else 1
+    run_vacancy_alert()
+    run_application_alert()
+    maybe_send_daily_summary(datetime.now(KST))  # 아침 8시 이후 그날 첫 점검이면 일일 요약도 함께
     return 0
 
 

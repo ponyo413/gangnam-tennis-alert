@@ -86,7 +86,7 @@ def test_maybe_send_daily_summary_sends_once_per_day(tmp_path, monkeypatch):
     """8시대 첫 점검에 1번 보내고 도장 → 같은 날 다음 점검은 건너뛴다."""
     import src.main as m
     calls = []
-    monkeypatch.setattr(m, "run_summary", lambda: calls.append(1))
+    monkeypatch.setattr(m, "run_summary", lambda: calls.append(1) or True)  # 발송 성공(True) 가정
     monkeypatch.setattr(m, "SUMMARY_PATH", str(tmp_path / "summary_sent.json"))
     m.maybe_send_daily_summary(datetime(2026, 6, 26, 8, 2))   # 첫 8시대 점검 → 발송
     m.maybe_send_daily_summary(datetime(2026, 6, 26, 8, 7))   # 같은 날 → 건너뜀
@@ -97,7 +97,117 @@ def test_maybe_send_daily_summary_skips_before_8(tmp_path, monkeypatch):
     """8시 전엔 보내지 않는다(도장도 안 찍힘)."""
     import src.main as m
     calls = []
-    monkeypatch.setattr(m, "run_summary", lambda: calls.append(1))
+    monkeypatch.setattr(m, "run_summary", lambda: calls.append(1) or True)  # 발송 성공(True) 가정
     monkeypatch.setattr(m, "SUMMARY_PATH", str(tmp_path / "summary_sent.json"))
     m.maybe_send_daily_summary(datetime(2026, 6, 26, 7, 30))
     assert calls == []
+
+
+# ─────────────────────────────────────────────────────────────
+# [1번 개선] 요약 발송 '빵꾸' 방지 — 발송이 실패하면 도장을 안 찍는다.
+#
+# 텔레그램이 "너무 자주 보냈어"(429 등)라며 거부하면 send_telegram이 False를 돌려준다.
+# 예전엔 run_summary가 그 값을 무시하고 maybe_send_daily_summary가 무조건 '오늘 보냄✓'
+# 도장을 찍어버려, 발송 실패해도 그날 요약이 영영 안 왔다(편지가 우체통에 안 들어갔는데
+# 달력에 '보냄✓' 표시해버린 격). 이제 성공(True)일 때만 도장을 찍어 다음 점검에서 재시도한다.
+# ─────────────────────────────────────────────────────────────
+
+def test_maybe_send_daily_summary_retries_when_send_fails(tmp_path, monkeypatch):
+    """발송 실패(False)면 도장을 안 찍어, 다음 점검에서 한 번 더 시도한다(빵꾸 방지)."""
+    import src.main as m
+    calls = []
+    # run_summary가 '발송 실패(False)'를 돌려주는 상황 — 텔레그램이 막힌 경우
+    monkeypatch.setattr(m, "run_summary", lambda: calls.append(1) or False)
+    monkeypatch.setattr(m, "SUMMARY_PATH", str(tmp_path / "summary_sent.json"))
+    m.maybe_send_daily_summary(datetime(2026, 6, 26, 8, 2))   # 첫 점검 → 실패(도장 안 찍힘)
+    m.maybe_send_daily_summary(datetime(2026, 6, 26, 8, 7))   # 다음 점검 → 도장 없으니 재시도
+    assert calls == [1, 1]                                    # 두 번 다 시도 = 빵꾸 안 남
+
+
+def test_run_summary_returns_send_result(monkeypatch):
+    """run_summary는 텔레그램 발송이 성공하면 True, 거부되면 False를 돌려준다.
+
+    이 값을 보고 maybe_send_daily_summary가 '도장을 찍을지'를 정한다.
+    """
+    import src.main as m
+    # 실제 망·파일 접근 없이 흐름만 보도록 의존 함수들을 가짜로 바꾼다(monkeypatch)
+    monkeypatch.setattr(m, "load_settings", lambda: ({"강남": {}}, None))
+    monkeypatch.setattr(m, "fetch_slots", lambda: [])
+    monkeypatch.setattr(m, "fetch_esongpa_slots", lambda settings, previous: [])
+    monkeypatch.setattr(m, "load_slots", lambda path: [])
+    monkeypatch.setattr(m, "load_failures", lambda path: {})
+    monkeypatch.setattr(m, "save_failures", lambda path, data: None)
+
+    monkeypatch.setattr(m, "send_telegram", lambda text: True)
+    assert m.run_summary() is True
+    monkeypatch.setattr(m, "send_telegram", lambda text: False)
+    assert m.run_summary() is False
+
+
+def test_run_summary_keeps_failures_when_send_fails(monkeypatch):
+    """발송 실패 시 '어제 조회 실패 기록'을 지우지 않는다 — 다음 성공 발송에 보고하려 보존."""
+    import src.main as m
+    saved = []
+    monkeypatch.setattr(m, "load_settings", lambda: ({"강남": {}}, None))
+    monkeypatch.setattr(m, "fetch_slots", lambda: [])
+    monkeypatch.setattr(m, "fetch_esongpa_slots", lambda settings, previous: [])
+    monkeypatch.setattr(m, "load_slots", lambda path: [])
+    monkeypatch.setattr(m, "load_failures", lambda path: {"esongpa": 2})
+    monkeypatch.setattr(m, "save_failures", lambda path, data: saved.append(data))
+    monkeypatch.setattr(m, "send_telegram", lambda text: False)
+
+    m.run_summary()
+    assert saved == []   # 발송 실패 → 실패 기록 보존(리셋 안 함)
+
+
+def test_run_summary_resets_failures_when_send_succeeds(monkeypatch):
+    """발송 성공 시에만 '어제 조회 실패 기록'을 비운다(정상 보고를 마쳤으므로)."""
+    import src.main as m
+    saved = []
+    monkeypatch.setattr(m, "load_settings", lambda: ({"강남": {}}, None))
+    monkeypatch.setattr(m, "fetch_slots", lambda: [])
+    monkeypatch.setattr(m, "fetch_esongpa_slots", lambda settings, previous: [])
+    monkeypatch.setattr(m, "load_slots", lambda path: [])
+    monkeypatch.setattr(m, "load_failures", lambda path: {"esongpa": 2})
+    monkeypatch.setattr(m, "save_failures", lambda path, data: saved.append(data))
+    monkeypatch.setattr(m, "send_telegram", lambda text: True)
+
+    m.run_summary()
+    assert saved == [{}]   # 발송 성공 → 빈 기록으로 리셋
+
+
+# ─────────────────────────────────────────────────────────────
+# [경미 보강] 수동 'summary' 모드도 발송 실패를 종료코드로 알린다.
+#
+# 봇을 켜는 방법은 둘 — ①평소 자동(watch, 5분 점검) ②사람이 손으로 'summary'(요약만 지금).
+# run_summary가 이제 성공/실패(True/False)를 돌려주므로, 수동 모드에선 그 값을 종료코드로
+# 넘겨 GitHub Actions가 발송 실패를 '빨간불'로 감지할 수 있게 한다(watch 모드는 늘 0 유지).
+# ─────────────────────────────────────────────────────────────
+
+def test_main_summary_mode_returns_1_when_send_fails(monkeypatch):
+    """수동 'summary' 모드에서 발송 실패(False)면 종료코드 1을 돌려준다(실패 감지)."""
+    import sys
+    import src.main as m
+    monkeypatch.setattr(sys, "argv", ["main", "summary"])
+    monkeypatch.setattr(m, "run_summary", lambda: False)
+    assert m.main() == 1
+
+
+def test_main_summary_mode_returns_0_when_send_succeeds(monkeypatch):
+    """수동 'summary' 모드에서 발송 성공(True)이면 종료코드 0(정상)."""
+    import sys
+    import src.main as m
+    monkeypatch.setattr(sys, "argv", ["main", "summary"])
+    monkeypatch.setattr(m, "run_summary", lambda: True)
+    assert m.main() == 0
+
+
+def test_main_watch_mode_returns_0(monkeypatch):
+    """평소 'watch' 모드는 항상 종료코드 0 — 점검만 하고 워크플로는 성공 처리(기존 동작 보존)."""
+    import sys
+    import src.main as m
+    monkeypatch.setattr(sys, "argv", ["main"])
+    monkeypatch.setattr(m, "run_vacancy_alert", lambda: None)
+    monkeypatch.setattr(m, "run_application_alert", lambda: None)
+    monkeypatch.setattr(m, "maybe_send_daily_summary", lambda now: None)
+    assert m.main() == 0
