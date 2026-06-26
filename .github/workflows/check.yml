@@ -6,6 +6,13 @@ on:
     - cron: "*/5 * * * *"   # 5분마다 (GitHub 최소 간격; 혼잡 시 지연될 수 있음)
   workflow_dispatch:         # 손으로도 실행해 볼 수 있게 (Actions 탭의 Run workflow)
 
+# 같은 시각에 두 트리거(GitHub 예약 + 외부 cron-job.org)가 겹쳐 돌아도
+# '한 번에 하나만' 실행되게 묶는다 → 8시 요약/빈자리 알림이 2통 가는 일 방지.
+# cancel-in-progress: false = 이미 도는 점검은 끊지 않고, 다음 것이 끝나길 기다린다.
+concurrency:
+  group: tennis-check
+  cancel-in-progress: false
+
 jobs:
   check:
     runs-on: ubuntu-latest
@@ -28,6 +35,7 @@ jobs:
             status.json
             failures.json
             read_fail.json
+            summary_sent.json
           key: tennis-state-v4-${{ github.run_id }}
           restore-keys: tennis-state-v4-
 

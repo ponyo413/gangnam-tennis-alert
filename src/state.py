@@ -82,3 +82,19 @@ def load_daechi_fetch_time(path):
 def save_daechi_fetch_time(path, iso_str) -> None:
     """대치유수지 마지막 조회 시각(ISO 문자열)을 저장."""
     Path(path).write_text(json.dumps({"at": iso_str}, ensure_ascii=False), encoding="utf-8")
+
+
+def load_summary_date(path):
+    """마지막으로 '일일 요약'을 보낸 날짜(YYYY-MM-DD). 파일이 없거나 깨졌으면 None(아직 안 보냄)."""
+    p = Path(path)
+    if not p.exists():
+        return None
+    try:
+        return json.loads(p.read_text(encoding="utf-8")).get("date")
+    except Exception:
+        return None
+
+
+def save_summary_date(path, date_str) -> None:
+    """'일일 요약'을 보낸 날짜(YYYY-MM-DD)를 저장 — 하루 한 번만 보내려고 기억."""
+    Path(path).write_text(json.dumps({"date": date_str}, ensure_ascii=False), encoding="utf-8")

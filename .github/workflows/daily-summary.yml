@@ -1,11 +1,12 @@
 # .github/workflows/daily-summary.yml
-# 매일 아침 8시(KST) '현재 빈자리 전체'를 요약 1통 발송 — 직전기록(state) 불필요
-name: 빈자리 요약
+# '현재 빈자리 전체'를 요약 1통 발송 — 직전기록(state) 불필요.
+# ※ 매일 자동 발송은 check.yml(5분 점검)이 아침 8시대에 담당하도록 옮겼다.
+#    (GitHub 무료 예약타이머가 1시간씩 늦잠 자던 문제 → 제시간에 도는 5분 점검에 얹음)
+#    그래서 여기 자동 예약(schedule)은 제거하고, 손으로 직접 돌려보는 용도만 남긴다.
+name: 빈자리 요약(수동)
 
 on:
-  schedule:
-    - cron: "0 23 * * *"   # UTC 23:00 = KST 08:00
-  workflow_dispatch:
+  workflow_dispatch:   # Actions 탭에서 손으로 실행해 볼 때만 사용
 
 jobs:
   summary:
@@ -25,6 +26,7 @@ jobs:
             state.json
             status.json
             failures.json
+            summary_sent.json
           key: tennis-state-v4-${{ github.run_id }}
           restore-keys: tennis-state-v4-
       - name: 빈자리 요약 발송
