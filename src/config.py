@@ -26,10 +26,6 @@ COURTS = [
     },
 ]
 
-# 저녁 시간 범위 (시작시각 기준: 19·20·21시 시작 = 19시~22시 직전). 평일·주말 공통.
-EVENING_START = 19
-EVENING_END = 22
-
 # 텔레그램 토큰 (코드에 직접 안 적고 환경변수/금고에서 가져옴)
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN", "")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")

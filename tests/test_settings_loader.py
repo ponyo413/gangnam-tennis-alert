@@ -71,3 +71,27 @@ def test_직전정상도_없으면_기본값(tmp_path):
     settings, err = load_settings(str(bad), str(tmp_path / "none.yaml"))
     assert err is not None
     assert settings == DEFAULT_SETTINGS
+
+
+# ── [검토 보강] 비상 기본값(DEFAULT_SETTINGS)을 현재 운영 설정과 일치시킨다.
+#    설정표(settings.yaml)가 깨지고 직전 정상 백업(last_good)마저 없을 때 이 값으로 도는데,
+#    예전엔 대치유수지가 통째로 빠지고 잠실 토요일 오전(8·10시)도 없어 그 알림이 끊겼다.
+def test_기본값에_운영_시설이_모두_있다():
+    """비상 기본값에도 운영 중인 4개 시설이 다 들어 있어야 한다(폴백 시 알림 끊김 방지)."""
+    assert set(DEFAULT_SETTINGS) == {"강남", "송파", "잠실", "대치유수지"}
+
+
+def test_기본값_잠실_토요일에_오전도_포함():
+    """비상 기본값 잠실 토요일 = 오전 8·10시 + 저녁 18·20시(운영 설정과 일치)."""
+    assert DEFAULT_SETTINGS["잠실"]["토"] == [8, 10, 18, 20]
+
+
+def test_기본값_대치유수지_시간대():
+    """비상 기본값 대치유수지 = 평일 19시 + 토 7·9·19시(운영 설정과 일치)."""
+    assert DEFAULT_SETTINGS["대치유수지"]["평일"] == [19]
+    assert DEFAULT_SETTINGS["대치유수지"]["토"] == [7, 9, 19]
+
+
+def test_기본값_자체가_형식검증_통과():
+    """비상 기본값이 validate_settings를 통과해야 한다(폴백이 또 깨지지 않게)."""
+    assert validate_settings(DEFAULT_SETTINGS) == DEFAULT_SETTINGS
