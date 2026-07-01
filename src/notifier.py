@@ -3,7 +3,7 @@ from datetime import date
 
 import requests
 from src.models import Slot
-from src.config import TELEGRAM_TOKEN, TELEGRAM_CHAT_ID, RESERVE_URL
+from src.config import TELEGRAM_TOKEN, TELEGRAM_CHAT_ID, RESERVE_URL, OLYMPIC_URL
 
 # 한 메시지에 빈자리를 너무 많이 담지 않도록 제한
 MAX_LINES = 10
@@ -79,3 +79,33 @@ def format_summary(slots: list[Slot], failures: dict | None = None,
         detail = ", ".join(f"{k} {v}번" for k, v in failures.items())
         lines.append(f"⚠️ 어제 조회 실패: {detail}")
     return "\n".join(lines)
+
+
+def format_olympic_alert(label: str, kind: str, cur: str = "", prev: str = "") -> str:
+    """올림픽공원 레슨 대기 알림 문구를 만든다.
+
+    label 예: '주중 실외 19시'. kind = '열림'/'변동'/'닫힘'.
+    cur/prev = 그 칸의 현재/직전 표시값(숫자 문자열 등).
+
+    kind별 동작:
+      '열림' — 마감/X → 숫자: 이제 대기 신청이 열렸다. OLYMPIC_URL 링크를 붙인다.
+      '변동' — 숫자 → 숫자: 대기 인원/자리 수가 달라졌다. 직전값 → 현재값 표시.
+      '닫힘' — 숫자 → 마감/X: 대기 줄이 다시 닫혔다. 링크 불필요(어차피 신청 못 함).
+    """
+    if kind == "열림":   # 마감/X → 숫자: 이제 대기 신청 가능
+        return (
+            f"🎾 올림픽공원 테니스 레슨 대기 열림!\n"
+            f"📋 {label} — 지금 {cur}\n"
+            f"👉 지금 대기 신청: {OLYMPIC_URL}"
+        )
+    if kind == "변동":   # 숫자 → 숫자: 대기 인원/자리 수가 바뀜
+        return (
+            f"🔔 올림픽공원 레슨 대기 변동\n"
+            f"📋 {label} — {prev} → {cur}\n"
+            f"👉 {OLYMPIC_URL}"
+        )
+    # 닫힘: 숫자 → 마감/X (대기 줄이 다시 닫힘)
+    return (
+        f"🔒 올림픽공원 레슨 대기 마감\n"
+        f"📋 {label} (직전 {prev})"
+    )

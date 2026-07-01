@@ -79,3 +79,32 @@ def test_message에도_요일이_함께_표기된다():
     """새 빈자리 메시지(format_message)도 동일하게 요일을 붙인다 — 2026-07-04(토)."""
     msg = format_message([Slot("세곡", "4번코트", "2026-07-04", "21:00")])
     assert "2026-07-04(토)" in msg
+
+
+# ── 올림픽공원 레슨 대기 알림 문구(3종: 열림/변동/닫힘) ──────────────
+from src.notifier import format_olympic_alert
+
+
+def test_olympic_alert_열림():
+    """마감→숫자: '대기 열림' + 칸 이름 + 현재 숫자 + 신청 링크."""
+    msg = format_olympic_alert("주중 실외 19시", "열림", cur="3")
+    assert "대기 열림" in msg
+    assert "주중 실외 19시" in msg
+    assert "3" in msg
+    assert "ksponco" in msg          # 대기 신청 링크(OLYMPIC_URL)
+
+
+def test_olympic_alert_변동():
+    """숫자→숫자: '변동' + 직전값 → 현재값 화살표."""
+    msg = format_olympic_alert("주중 실내 19시", "변동", cur="15", prev="19")
+    assert "변동" in msg
+    assert "주중 실내 19시" in msg
+    assert "19" in msg and "15" in msg
+
+
+def test_olympic_alert_닫힘():
+    """숫자→마감: '마감' + 칸 이름 + 직전 숫자."""
+    msg = format_olympic_alert("주중 실외 19시", "닫힘", prev="3")
+    assert "마감" in msg
+    assert "주중 실외 19시" in msg
+    assert "3" in msg

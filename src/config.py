@@ -33,6 +33,9 @@ TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
 # 강남구 예약 사이트 (알림 메시지에 넣을 링크)
 RESERVE_URL = "https://life.gangnam.go.kr/fmcs/1"
 
+# 국민체육진흥공단 올림픽공원 테니스 레슨 '대기 현황'(조회 주소 겸 알림 링크)
+OLYMPIC_URL = "https://www.ksponco.or.kr/spm/reservationStatus/tennis/waitList.do?textSize=normal"
+
 # 날짜가 '온라인 예약 가능' 상태인지 판단하는 코드 (place_month_state_list의 state_cd)
 #   '10'=예약가능, '11'=예약가능(예비)  → 즉시 예약 대상이라 빈자리로 인정
 #   '15'=추첨접수(즉시예약 아님·제외), '20'=마감/예약불가, '30'=휴관일  → 제외
