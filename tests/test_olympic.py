@@ -36,3 +36,52 @@ def test_처음_등장한_숫자는_열림():
 
 def test_처음_등장한_마감은_조용():
     assert classify_change(None, "마감") is None
+
+
+from src.olympic import build_targets, parse_olympic
+
+# 실측 구조 축약: 첫 칸=요일, 둘째 칸=코트, 셋째 칸부터 시간칸. 값=마감/숫자/X.
+_SAMPLE = (
+    "<table>"
+    "<tr><th>요일</th><th>시간/코트</th><th>18시</th><th>19시</th><th>20시</th></tr>"
+    "<tr><th>주중</th><th>실외</th><td>마감</td><td>마감</td><td>마감</td></tr>"
+    "<tr><th>주중</th><th>실내</th><td>마감</td><td>3</td><td>X</td></tr>"
+    "</table>"
+)
+
+
+def test_build_targets_받기off거나_없으면_빈목록():
+    assert build_targets({"받기": False, "코트": ["실외"], "주중": [19]}) == []
+    assert build_targets(None) == []
+
+
+def test_build_targets_주중_두_코트():
+    got = build_targets({"받기": True, "코트": ["실외", "실내"], "주중": [19]})
+    assert set(got) == {("주중", "실외", 19), ("주중", "실내", 19)}
+
+
+def test_build_targets_잘못된_코트는_무시():
+    got = build_targets({"받기": True, "코트": ["실외", "옥상"], "주중": [19]})
+    assert got == [("주중", "실외", 19)]
+
+
+def test_parse_reads_target_cells():
+    targets = [("주중", "실외", 19), ("주중", "실내", 19)]
+    got = parse_olympic(_SAMPLE, targets)
+    assert got == {"주중 실외 19시": "마감", "주중 실내 19시": "3"}
+
+
+def test_parse_handles_X_and_column_shift():
+    """19시 열 위치가 달라져도(헤더 지도로 찾음) 값을 정확히 읽는다."""
+    html = (
+        "<table>"
+        "<tr><th>요일</th><th>시간/코트</th><th>20시</th><th>19시</th></tr>"
+        "<tr><th>주중</th><th>실내</th><td>마감</td><td>X</td></tr>"
+        "</table>"
+    )
+    assert parse_olympic(html, [("주중", "실내", 19)]) == {"주중 실내 19시": "X"}
+
+
+def test_parse_skips_targets_not_in_table():
+    """표에 없는 대상(주말)은 결과에 없다(예외 없이 건너뜀)."""
+    assert parse_olympic(_SAMPLE, [("주말", "실외", 19)]) == {}

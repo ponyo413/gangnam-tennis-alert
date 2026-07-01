@@ -7,6 +7,23 @@
 날짜 축이 없는 고정 주간표(주중/주말)라 '칸별 현재값 dict'만 다룬다.
 """
 
+import re
+
+DAY_KEYS = ("주중", "주말", "수요일")   # 표 첫 칸(요일)에 나올 수 있는 값
+COURT_KEYS = ("실외", "실내")            # 표 둘째 칸(코트)
+
+# 표 파싱용 정규식(스크립트 제거 → <tr> → <th|td> 순)
+_SCRIPT_RE = re.compile(r"<script.*?</script>", re.DOTALL | re.IGNORECASE)
+_TR_RE = re.compile(r"<tr[^>]*>(.*?)</tr>", re.DOTALL | re.IGNORECASE)
+_CELL_RE = re.compile(r"<(t[hd])[^>]*>(.*?)</\1>", re.DOTALL | re.IGNORECASE)
+_HOUR_RE = re.compile(r"(\d+)\s*시")     # "19시" → 19
+
+
+def _clean(fragment):
+    """HTML 조각에서 태그 제거 + 공백 정리 → 순수 텍스트."""
+    text = re.sub(r"<[^>]+>", " ", fragment)
+    return re.sub(r"\s+", " ", text).strip()
+
 
 def _is_number(value):
     """값이 숫자(대기 가능)인지. None·'마감'·'X'는 False (None-안전)."""
@@ -26,3 +43,65 @@ def classify_change(prev, cur):
     if _is_number(cur):
         return "변동" if _is_number(prev) else "열림"
     return "닫힘" if _is_number(prev) else None
+
+
+def build_targets(cfg):
+    """설정(cfg) → 감시할 (요일, 코트, 시) 튜플 목록(순수함수).
+
+    cfg 예: {"받기": True, "코트": ["실외","실내"], "주중": [19]}.
+    받기=False·설정 없음 → []. 요일키(주중/주말/수요일) × 코트 × 시각을 모두 편다.
+    """
+    if not cfg or not cfg.get("받기"):
+        return []
+    courts = [c for c in cfg.get("코트", []) if c in COURT_KEYS]
+    targets = []
+    for day in DAY_KEYS:
+        for hour in cfg.get(day, []):
+            for court in courts:
+                targets.append((day, court, hour))
+    return targets
+
+
+def _rows(html):
+    """HTML → 표의 각 줄을 '칸 텍스트 목록'으로. (스크립트 제거 후 <tr>·<th/td> 파싱)"""
+    body = _SCRIPT_RE.sub("", html)
+    rows = []
+    for tr in _TR_RE.findall(body):
+        cells = [_clean(m.group(2)) for m in _CELL_RE.finditer(tr)]
+        if cells:
+            rows.append(cells)
+    return rows
+
+
+def _hour_columns(rows):
+    """머리줄('시간/코트'가 든 줄)에서 {시각(int): 열번호} 지도를 만든다."""
+    for cells in rows:
+        if any("시간/코트" in c for c in cells):
+            cols = {}
+            for idx, c in enumerate(cells):
+                m = _HOUR_RE.fullmatch(c.replace(" ", ""))
+                if m:
+                    cols[int(m.group(1))] = idx
+            return cols
+    return {}
+
+
+def parse_olympic(html, targets):
+    """감시 대상 칸의 현재 값만 dict로 뽑는다(순수 파싱).
+
+    targets: (요일, 코트, 시) 튜플 목록.
+    반환: {"주중 실외 19시": "마감", "주중 실내 19시": "3", ...} — 칸 실제 텍스트 그대로.
+    표에서 못 찾은 칸은 그냥 빠진다(예외 안 냄).
+    """
+    rows = _rows(html)
+    hour_cols = _hour_columns(rows)
+    result = {}
+    for day, court, hour in targets:
+        col = hour_cols.get(hour)
+        if col is None:
+            continue
+        for cells in rows:
+            if len(cells) > col and cells[0] == day and cells[1] == court:
+                result[f"{day} {court} {hour}시"] = cells[col]
+                break
+    return result
