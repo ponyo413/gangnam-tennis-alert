@@ -91,6 +91,11 @@ def format_olympic_alert(label: str, kind: str, cur: str = "", prev: str = "") -
       '열림' — 마감/X → 숫자: 이제 대기 신청이 열렸다. OLYMPIC_URL 링크를 붙인다.
       '변동' — 숫자 → 숫자: 대기 인원/자리 수가 달라졌다. 직전값 → 현재값 표시.
       '닫힘' — 숫자 → 마감/X: 대기 줄이 다시 닫혔다. 링크 불필요(어차피 신청 못 함).
+
+    kind별 필요한 값:
+      '열림' — cur 필수(현재 대기 숫자). 신청 링크 포함.
+      '변동' — cur·prev 모두 필수(직전→현재). 신청 링크 포함.
+      '닫힘' — prev 필수(직전 대기 숫자). 링크 없음.
     """
     if kind == "열림":   # 마감/X → 숫자: 이제 대기 신청 가능
         return (
@@ -104,8 +109,10 @@ def format_olympic_alert(label: str, kind: str, cur: str = "", prev: str = "") -
             f"📋 {label} — {prev} → {cur}\n"
             f"👉 {OLYMPIC_URL}"
         )
-    # 닫힘: 숫자 → 마감/X (대기 줄이 다시 닫힘)
-    return (
-        f"🔒 올림픽공원 레슨 대기 마감\n"
-        f"📋 {label} (직전 {prev})"
-    )
+    if kind == "닫힘":   # 숫자 → 마감/X (대기 줄이 다시 닫힘)
+        return (
+            f"🔒 올림픽공원 레슨 대기 마감\n"
+            f"📋 {label} (직전 {prev})"
+        )
+    # 예상 밖 kind는 조용히 넘기지 않고 바로 오류를 내서 버그를 시끄럽게 드러낸다
+    raise ValueError(f"알 수 없는 kind: {kind!r} — '열림'·'변동'·'닫힘' 중 하나여야 합니다")

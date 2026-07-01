@@ -99,7 +99,7 @@ def test_olympic_alert_변동():
     msg = format_olympic_alert("주중 실내 19시", "변동", cur="15", prev="19")
     assert "변동" in msg
     assert "주중 실내 19시" in msg
-    assert "19" in msg and "15" in msg
+    assert "19 → 15" in msg   # 직전 → 현재 화살표가 실제로 렌더링되는지 확인
 
 
 def test_olympic_alert_닫힘():
@@ -108,3 +108,4 @@ def test_olympic_alert_닫힘():
     assert "마감" in msg
     assert "주중 실외 19시" in msg
     assert "3" in msg
+    assert "ksponco" not in msg   # 닫힘 메시지엔 신청 링크 없음(어차피 못 신청)
