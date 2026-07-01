@@ -70,3 +70,18 @@ def test_없는_요약발송파일은_None(tmp_path):
     """파일이 없으면(아직 한 번도 안 보냄) None — 8시대 첫 점검에서 보내도록."""
     from src.state import load_summary_date
     assert load_summary_date(tmp_path / "none.json") is None
+
+
+def test_올림픽_상태_저장_불러오기(tmp_path):
+    """감시 칸의 현재 값 dict를 저장하고 그대로 다시 읽어야 함."""
+    from src.state import save_olympic_state, load_olympic_state
+    path = tmp_path / "olympic_state.json"
+    state = {"주중 실외 19시": "마감", "주중 실내 19시": "3"}
+    save_olympic_state(path, state)
+    assert load_olympic_state(path) == state
+
+
+def test_없는_올림픽상태파일은_빈_dict(tmp_path):
+    """파일이 없으면(첫 실행) 빈 dict — 첫 실행 취급."""
+    from src.state import load_olympic_state
+    assert load_olympic_state(tmp_path / "none.json") == {}

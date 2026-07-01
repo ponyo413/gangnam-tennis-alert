@@ -98,3 +98,27 @@ def load_summary_date(path):
 def save_summary_date(path, date_str) -> None:
     """'일일 요약'을 보낸 날짜(YYYY-MM-DD)를 저장 — 하루 한 번만 보내려고 기억."""
     Path(path).write_text(json.dumps({"date": date_str}, ensure_ascii=False), encoding="utf-8")
+
+
+def save_olympic_state(path, state: dict) -> None:
+    """올림픽 감시 칸의 현재 값 dict를 JSON으로 저장.
+
+    예) {"주중 실외 19시": "마감", "주중 실내 19시": "3"}
+    다음 실행 때 직전 상태와 비교해 변경분만 알림을 보내는 데 사용.
+    """
+    Path(path).write_text(json.dumps(state, ensure_ascii=False), encoding="utf-8")
+
+
+def load_olympic_state(path) -> dict:
+    """올림픽 감시 칸 상태 dict를 불러옴. 파일이 없거나 깨졌으면 빈 dict.
+
+    파일 없음(첫 실행) = 직전 상태를 모름 → 빈 dict 반환.
+    이 경우 모든 칸이 '새 값'으로 처리돼 변경 감지가 시작된다.
+    """
+    p = Path(path)
+    if not p.exists():
+        return {}
+    try:
+        return json.loads(p.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
