@@ -40,6 +40,7 @@ jobs:
             summary_sent.json
             daechi_slots.json
             daechi_fetch.json
+            olympic_state.json
           key: tennis-state-v4-${{ github.run_id }}
           restore-keys: tennis-state-v4-
 
