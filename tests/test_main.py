@@ -209,6 +209,7 @@ def test_main_watch_mode_returns_0(monkeypatch):
     monkeypatch.setattr(sys, "argv", ["main"])
     monkeypatch.setattr(m, "run_vacancy_alert", lambda: None)
     monkeypatch.setattr(m, "run_application_alert", lambda: None)
+    monkeypatch.setattr(m, "run_olympic_alert", lambda: None)   # 올림픽 감시도 목킹(실제 네트워크 방지)
     monkeypatch.setattr(m, "maybe_send_daily_summary", lambda now: None)
     assert m.main() == 0
 
