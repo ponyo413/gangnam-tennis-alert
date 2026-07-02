@@ -77,8 +77,8 @@ def test_직전정상도_없으면_기본값(tmp_path):
 #    설정표(settings.yaml)가 깨지고 직전 정상 백업(last_good)마저 없을 때 이 값으로 도는데,
 #    예전엔 대치유수지가 통째로 빠지고 잠실 토요일 오전(8·10시)도 없어 그 알림이 끊겼다.
 def test_기본값에_운영_시설이_모두_있다():
-    """비상 기본값에도 운영 중인 4개 시설이 다 들어 있어야 한다(폴백 시 알림 끊김 방지)."""
-    assert set(DEFAULT_SETTINGS) == {"강남", "송파", "잠실", "대치유수지"}
+    """비상 기본값에도 운영 중인 시설이 다 들어 있어야 한다(폴백 시 알림 끊김 방지)."""
+    assert set(DEFAULT_SETTINGS) == {"강남", "송파", "잠실", "대치유수지", "올림픽공원레슨"}
 
 
 def test_기본값_잠실_토요일에_오전도_포함():
@@ -95,3 +95,28 @@ def test_기본값_대치유수지_시간대():
 def test_기본값_자체가_형식검증_통과():
     """비상 기본값이 validate_settings를 통과해야 한다(폴백이 또 깨지지 않게)."""
     assert validate_settings(DEFAULT_SETTINGS) == DEFAULT_SETTINGS
+
+
+# ── 올림픽공원레슨 블록(빈자리 시설과 모양이 다름: 코트=글자목록, 요일=주중/주말/수요일) ──
+def test_올림픽_블록_유효():
+    data = {"올림픽공원레슨": {"받기": True, "코트": ["실외", "실내"], "주중": [19]}}
+    assert validate_settings(data) == data
+
+
+def test_올림픽_코트값_틀리면_오류():
+    with pytest.raises(ValueError):
+        validate_settings({"올림픽공원레슨": {"받기": True, "코트": ["옥상"], "주중": [19]}})
+
+
+def test_올림픽_이상한_요일키_오류():
+    with pytest.raises(ValueError):
+        validate_settings({"올림픽공원레슨": {"받기": True, "코트": ["실외"], "월화": [19]}})
+
+
+def test_올림픽_시간이_숫자목록_아니면_오류():
+    with pytest.raises(ValueError):
+        validate_settings({"올림픽공원레슨": {"받기": True, "코트": ["실외"], "주중": "저녁"}})
+
+
+def test_기본값_올림픽공원레슨_시간대():
+    assert DEFAULT_SETTINGS["올림픽공원레슨"] == {"받기": True, "코트": ["실외", "실내"], "주중": [19]}

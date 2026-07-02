@@ -16,6 +16,7 @@ DEFAULT_SETTINGS = {
     "잠실": {"받기": True, "토": [8, 10, 18, 20], "일": [18, 20],
              "월": [20], "화": [20], "수": [20]},
     "대치유수지": {"받기": True, "평일": [19], "토": [7, 9, 19]},
+    "올림픽공원레슨": {"받기": True, "코트": ["실외", "실내"], "주중": [19]},
 }
 
 # date.weekday() 0~6 → 요일 글자. 설정표 키와 필터(filters)가 공유하는 단일 출처.
@@ -24,6 +25,33 @@ WEEKDAY_KEYS = ["월", "화", "수", "목", "금", "토", "일"]
 
 # 시간 설정에 쓸 수 있는 키: 요일(월~일) + 매일 + 평일/주말 묶음
 TIME_KEYS = set(WEEKDAY_KEYS) | {"매일", "평일", "주말"}
+
+# 올림픽공원레슨 블록 전용 허용값(빈자리 시설과 형식이 달라 따로 검증)
+# - 코트: 실외(야외 코트) 또는 실내(실내 코트) 글자 목록
+# - 요일 키: 주중(월~금), 주말(토·일), 수요일(특정 요일)
+_OLYMPIC_COURTS = {"실외", "실내"}
+_OLYMPIC_DAY_KEYS = {"주중", "주말", "수요일"}
+
+
+def _validate_olympic_block(cfg):
+    """올림픽공원레슨 블록 검증 — 받기(bool) + 코트(실외/실내 목록) + 요일(주중/주말/수요일→시각목록).
+
+    빈자리 시설(강남/송파/잠실/대치유수지)과 형식이 다르기 때문에 별도 검증 함수로 분리.
+    - 코트: 실외/실내 중 하나 이상의 글자 목록
+    - 요일 키: 주중/주말/수요일 중 하나 → 정수 목록(시각)
+    """
+    if not isinstance(cfg.get("받기"), bool):
+        raise ValueError("'올림픽공원레슨'의 '받기'는 true 또는 false여야 합니다")
+    courts = cfg.get("코트", [])
+    if not (isinstance(courts, list) and all(c in _OLYMPIC_COURTS for c in courts)):
+        raise ValueError("'올림픽공원레슨'의 '코트'는 실외/실내 목록이어야 합니다")
+    for key, val in cfg.items():
+        if key in ("받기", "코트"):
+            continue
+        if key not in _OLYMPIC_DAY_KEYS:
+            raise ValueError(f"'올림픽공원레슨'의 '{key}'는 주중/주말/수요일이어야 합니다")
+        if not (isinstance(val, list) and all(isinstance(h, int) for h in val)):
+            raise ValueError(f"'올림픽공원레슨 {key}'의 시간은 숫자 목록이어야 합니다(예: [19])")
 
 
 def _validate_time_block(label, cfg):
@@ -42,6 +70,11 @@ def validate_settings(data):
     for fac, cfg in data.items():
         if not isinstance(cfg, dict):
             raise ValueError(f"'{fac}' 설정이 표 형식이 아닙니다")
+        # 올림픽공원레슨은 형식이 달라(코트=글자목록, 요일=주중/주말/수요일)
+        # 빈자리 시설용 time-key 검증을 건너뛰고 전용 함수로 검증한다.
+        if fac == "올림픽공원레슨":
+            _validate_olympic_block(cfg)
+            continue
         if not isinstance(cfg.get("받기"), bool):
             raise ValueError(f"'{fac}'의 '받기'는 true 또는 false여야 합니다")
         for key, val in cfg.items():
