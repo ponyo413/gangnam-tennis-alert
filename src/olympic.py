@@ -143,7 +143,13 @@ def fetch_olympic_states(settings):
         session = make_session(HEADERS)
         r = session.get(OLYMPIC_URL, timeout=REQUEST_TIMEOUT)
         r.encoding = "utf-8"            # 표 한글 깨짐 방지
-        return parse_olympic(r.text, targets)
+        result = parse_olympic(r.text, targets)
+        # 페이지는 받았는데 감시 칸을 하나도 못 찾으면 사이트 표 구조가 바뀐 것일 수 있다.
+        # 조용히 감시가 멈추지 않도록 경고를 남긴다(감시 대상이 있는데 결과가 0건일 때만).
+        if targets and not result:
+            print(f"[올림픽공원 경고] 조회는 됐으나 감시 칸 {len(targets)}개를 표에서 못 찾음 "
+                  f"— 사이트 구조 변경 확인 필요")
+        return result
     except Exception as e:
         print(f"[올림픽공원 조회 실패] {e}")
         return None

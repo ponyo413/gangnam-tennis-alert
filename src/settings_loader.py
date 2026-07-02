@@ -45,6 +45,8 @@ def _validate_olympic_block(cfg):
     courts = cfg.get("코트", [])
     if not (isinstance(courts, list) and all(c in _OLYMPIC_COURTS for c in courts)):
         raise ValueError("'올림픽공원레슨'의 '코트'는 실외/실내 목록이어야 합니다")
+    if not courts:
+        raise ValueError("'올림픽공원레슨'의 '코트'는 최소 하나(실외/실내) 골라야 합니다")
     for key, val in cfg.items():
         if key in ("받기", "코트"):
             continue

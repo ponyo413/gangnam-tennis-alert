@@ -107,6 +107,21 @@ def test_build_messages_변동은_화살표():
     assert "19 → 15" in msgs[0]   # 직전 → 현재 화살표가 실제로 렌더링되는지(라벨의 "19"에 속지 않게)
 
 
+def test_fetch_경고_페이지받았는데_칸없음(monkeypatch, capsys):
+    """페이지는 받았지만 표에서 감시 칸을 못 찾으면(구조 변경) 경고 로그 + {} 반환."""
+    html = "<table><tr><th>요일</th><th>시간/코트</th><th>19시</th></tr></table>"  # 데이터 행 없음
+
+    class FakeResp:
+        text = html
+        encoding = "utf-8"
+
+    monkeypatch.setattr("requests.Session.get", lambda self, *a, **k: FakeResp())
+    settings = {"올림픽공원레슨": {"받기": True, "코트": ["실외"], "주중": [19]}}
+    result = fetch_olympic_states(settings)
+    assert result == {}
+    assert "감시 칸" in capsys.readouterr().out
+
+
 def test_fetch_받기off는_빈dict():
     assert fetch_olympic_states({"올림픽공원레슨": {"받기": False}}) == {}
     assert fetch_olympic_states({}) == {}

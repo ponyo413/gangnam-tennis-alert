@@ -97,6 +97,11 @@ def test_기본값_자체가_형식검증_통과():
     assert validate_settings(DEFAULT_SETTINGS) == DEFAULT_SETTINGS
 
 
+def test_올림픽_코트_비면_오류():
+    with pytest.raises(ValueError):
+        validate_settings({"올림픽공원레슨": {"받기": True, "코트": [], "주중": [19]}})
+
+
 # ── 올림픽공원레슨 블록(빈자리 시설과 모양이 다름: 코트=글자목록, 요일=주중/주말/수요일) ──
 def test_올림픽_블록_유효():
     data = {"올림픽공원레슨": {"받기": True, "코트": ["실외", "실내"], "주중": [19]}}
