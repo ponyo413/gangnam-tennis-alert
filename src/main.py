@@ -11,6 +11,7 @@ from pathlib import Path
 from src.fetcher import fetch_slots, fetch_facility_status
 from src.esongpa import fetch_esongpa_slots
 from src.daechi import fetch_daechi_slots, is_daechi_due, KST
+from src.olympic import fetch_olympic_states, build_olympic_messages
 from src.filters import is_wanted_for
 from src.settings_loader import load_settings
 from src.differ import has_changed, find_opened
@@ -18,7 +19,8 @@ from src.notifier import send_telegram, format_application_message, format_summa
 from src.state import (load_slots, save_slots, load_status, save_status,
                        load_failures, save_failures, load_fail_count, save_fail_count,
                        load_daechi_fetch_time, save_daechi_fetch_time,
-                       load_summary_date, save_summary_date)
+                       load_summary_date, save_summary_date,
+                       save_olympic_state, load_olympic_state)
 from src.config import STATUS_PATH
 
 STATE_PATH = "state.json"      # 직전 빈자리 기록
@@ -29,6 +31,7 @@ DAECHI_SLOTS_PATH = "daechi_slots.json"   # 대치유수지 직전 빈자리(박
 DAECHI_TIME_PATH = "daechi_fetch.json"    # 대치유수지 마지막 조회 시각
 SUMMARY_PATH = "summary_sent.json"        # 마지막으로 '일일 요약'을 보낸 날짜(하루 한 번만 보내려 기억)
 SUMMARY_HOUR = 8                          # 일일 요약을 보내는 한국시각(아침 8시대)
+OLYMPIC_STATE_PATH = "olympic_state.json"   # 올림픽 감시 칸의 직전 값(캐시 보관)
 
 
 def read_fail_decision(prev_count, success, threshold=READ_FAIL_THRESHOLD):
@@ -147,6 +150,33 @@ def run_application_alert():
     save_status(STATUS_PATH, status)
 
 
+def run_olympic_alert():
+    """③ 올림픽공원 레슨 대기 감시 — 칸 값이 바뀌면(열림/변동/닫힘) 각각 1통.
+
+    첫 실행은 현재 상태만 저장(알림 없음). 조회 실패는 실패 누적 + 직전 상태 유지.
+    받기 off/파싱 0건이면 조용히 넘어가고 직전 상태를 건드리지 않는다.
+    """
+    settings, _ = load_settings()
+    current = fetch_olympic_states(settings)   # dict / {} / None(실패)
+    if current is None:                        # 조회·파싱 실패 → 실패 누적, 직전 상태 유지
+        failures = load_failures(FAIL_PATH)
+        failures["올림픽공원레슨"] = failures.get("올림픽공원레슨", 0) + 1
+        save_failures(FAIL_PATH, failures)
+        return
+    if not current:                            # 감시 끔/대상 0 → 조용히(직전 상태 보존)
+        return
+    is_first = not Path(OLYMPIC_STATE_PATH).exists()
+    if is_first:
+        print(f"[올림픽 첫 실행] {len(current)}칸 기준 저장(알림 생략)")
+    else:
+        previous = load_olympic_state(OLYMPIC_STATE_PATH)
+        messages = build_olympic_messages(current, previous)
+        for text in messages:
+            send_telegram(text)
+        print(f"[올림픽 점검] 알림 {len(messages)}건")
+    save_olympic_state(OLYMPIC_STATE_PATH, current)
+
+
 def run_summary() -> bool:
     """매일 1회: 현재 '원하는 시간대' 빈자리 전체 + 어제 실패를 요약 발송(직전기록 불필요).
 
@@ -203,6 +233,7 @@ def main() -> int:
         return 0 if run_summary() else 1
     run_vacancy_alert()
     run_application_alert()
+    run_olympic_alert()   # ③ 올림픽공원 레슨 대기 감시
     maybe_send_daily_summary(datetime.now(KST))  # 아침 8시 이후 그날 첫 점검이면 일일 요약도 함께
     return 0
 

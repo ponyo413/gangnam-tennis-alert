@@ -211,3 +211,61 @@ def test_main_watch_mode_returns_0(monkeypatch):
     monkeypatch.setattr(m, "run_application_alert", lambda: None)
     monkeypatch.setattr(m, "maybe_send_daily_summary", lambda now: None)
     assert m.main() == 0
+
+
+# ─────────────────────────────────────────────────────────────
+# 올림픽공원 레슨 대기 감시 — run_olympic_alert 3분기
+# ─────────────────────────────────────────────────────────────
+def test_run_olympic_첫실행은_저장만_알림없음(tmp_path, monkeypatch):
+    import src.main as m
+    from src.state import load_olympic_state
+    sent = []
+    path = str(tmp_path / "olympic_state.json")
+    monkeypatch.setattr(m, "OLYMPIC_STATE_PATH", path)
+    monkeypatch.setattr(m, "load_settings", lambda: ({}, None))
+    monkeypatch.setattr(m, "fetch_olympic_states", lambda settings: {"주중 실외 19시": "마감"})
+    monkeypatch.setattr(m, "send_telegram", lambda text: sent.append(text) or True)
+    m.run_olympic_alert()
+    assert sent == []                                   # 첫 실행 알림 없음
+    assert load_olympic_state(path) == {"주중 실외 19시": "마감"}   # 기준 저장됨
+
+
+def test_run_olympic_값바뀌면_알림(tmp_path, monkeypatch):
+    import src.main as m
+    from src.state import save_olympic_state
+    path = str(tmp_path / "olympic_state.json")
+    save_olympic_state(path, {"주중 실외 19시": "마감"})   # 직전=마감
+    sent = []
+    monkeypatch.setattr(m, "OLYMPIC_STATE_PATH", path)
+    monkeypatch.setattr(m, "load_settings", lambda: ({}, None))
+    monkeypatch.setattr(m, "fetch_olympic_states", lambda settings: {"주중 실외 19시": "3"})  # 지금=3
+    monkeypatch.setattr(m, "send_telegram", lambda text: sent.append(text) or True)
+    m.run_olympic_alert()
+    assert len(sent) == 1 and "대기 열림" in sent[0]
+
+
+def test_run_olympic_조회실패는_실패누적(tmp_path, monkeypatch):
+    import src.main as m
+    saved = {}
+    monkeypatch.setattr(m, "OLYMPIC_STATE_PATH", str(tmp_path / "olympic_state.json"))
+    monkeypatch.setattr(m, "FAIL_PATH", str(tmp_path / "failures.json"))
+    monkeypatch.setattr(m, "load_settings", lambda: ({}, None))
+    monkeypatch.setattr(m, "fetch_olympic_states", lambda settings: None)   # 조회 실패
+    monkeypatch.setattr(m, "load_failures", lambda path: {})
+    monkeypatch.setattr(m, "save_failures", lambda path, data: saved.update(data))
+    m.run_olympic_alert()
+    assert saved.get("올림픽공원레슨") == 1
+
+
+def test_main_watch가_올림픽감시_호출(monkeypatch):
+    """watch 모드가 run_olympic_alert를 호출한다(배선 확인)."""
+    import sys
+    import src.main as m
+    called = []
+    monkeypatch.setattr(sys, "argv", ["main"])
+    monkeypatch.setattr(m, "run_vacancy_alert", lambda: None)
+    monkeypatch.setattr(m, "run_application_alert", lambda: None)
+    monkeypatch.setattr(m, "run_olympic_alert", lambda: called.append(1))
+    monkeypatch.setattr(m, "maybe_send_daily_summary", lambda now: None)
+    assert m.main() == 0
+    assert called == [1]
