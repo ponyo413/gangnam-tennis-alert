@@ -9,8 +9,16 @@
 
 import re
 
+from src.config import OLYMPIC_URL
+from src.http_session import make_session
+from src.notifier import format_olympic_alert
+
 DAY_KEYS = ("주중", "주말", "수요일")   # 표 첫 칸(요일)에 나올 수 있는 값
 COURT_KEYS = ("실외", "실내")            # 표 둘째 칸(코트)
+
+HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                         "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36"}
+REQUEST_TIMEOUT = 8   # 한 요청 최대 기다림(초)
 
 # 표 파싱용 정규식(스크립트 제거 → <tr> → <th|td> 순)
 _SCRIPT_RE = re.compile(r"<script.*?</script>", re.DOTALL | re.IGNORECASE)
@@ -105,3 +113,37 @@ def parse_olympic(html, targets):
                 result[f"{day} {court} {hour}시"] = cells[col]
                 break
     return result
+
+
+def build_olympic_messages(current, previous):
+    """직전(previous)·현재(current) 값 dict를 비교해 보낼 알림 문구 목록을 만든다.
+
+    current의 각 칸을 classify_change로 판정하고, 종류가 있으면 문구 1개씩.
+    """
+    messages = []
+    for label, cur in current.items():
+        prev = previous.get(label)
+        kind = classify_change(prev, cur)
+        if kind:
+            messages.append(format_olympic_alert(label, kind, cur, prev or ""))
+    return messages
+
+
+def fetch_olympic_states(settings):
+    """설정 기반으로 대기 현황표를 조회해 감시 칸의 현재 값 dict를 돌려준다.
+
+    반환: dict(정상) / {}(받기 off·대상 0개) / None(조회·파싱 실패 → main이 직전 유지).
+    조회 예외는 밖으로 던지지 않는다(다른 시설 알림 보호).
+    """
+    cfg = settings.get("올림픽공원레슨")
+    targets = build_targets(cfg)
+    if not targets:
+        return {}                       # 감시 끔 → 조회 안 함
+    try:
+        session = make_session(HEADERS)
+        r = session.get(OLYMPIC_URL, timeout=REQUEST_TIMEOUT)
+        r.encoding = "utf-8"            # 표 한글 깨짐 방지
+        return parse_olympic(r.text, targets)
+    except Exception as e:
+        print(f"[올림픽공원 조회 실패] {e}")
+        return None

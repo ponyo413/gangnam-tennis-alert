@@ -85,3 +85,54 @@ def test_parse_handles_X_and_column_shift():
 def test_parse_skips_targets_not_in_table():
     """표에 없는 대상(주말)은 결과에 없다(예외 없이 건너뜀)."""
     assert parse_olympic(_SAMPLE, [("주말", "실외", 19)]) == {}
+
+
+from src.olympic import build_olympic_messages, fetch_olympic_states
+
+
+def test_build_messages_바뀐_칸만_문구():
+    """실외는 마감→3(열림), 실내는 그대로 → 문구 1개(실외 열림)."""
+    prev = {"주중 실외 19시": "마감", "주중 실내 19시": "19"}
+    cur = {"주중 실외 19시": "3", "주중 실내 19시": "19"}
+    msgs = build_olympic_messages(cur, prev)
+    assert len(msgs) == 1
+    assert "주중 실외 19시" in msgs[0] and "대기 열림" in msgs[0]
+
+
+def test_build_messages_변동은_화살표():
+    prev = {"주중 실내 19시": "19"}
+    cur = {"주중 실내 19시": "15"}
+    msgs = build_olympic_messages(cur, prev)
+    assert len(msgs) == 1
+    assert "19" in msgs[0] and "15" in msgs[0]
+
+
+def test_fetch_받기off는_빈dict():
+    assert fetch_olympic_states({"올림픽공원레슨": {"받기": False}}) == {}
+    assert fetch_olympic_states({}) == {}
+
+
+def test_fetch_네트워크오류면_None(monkeypatch):
+    """조회가 터지면 예외를 밖으로 던지지 않고 None(main이 직전 유지)."""
+    def boom(self, *a, **k):
+        raise RuntimeError("연결 실패")
+    monkeypatch.setattr("requests.Session.get", boom)
+    settings = {"올림픽공원레슨": {"받기": True, "코트": ["실외"], "주중": [19]}}
+    assert fetch_olympic_states(settings) is None
+
+
+def test_fetch_정상파싱(monkeypatch):
+    html = (
+        "<table>"
+        "<tr><th>요일</th><th>시간/코트</th><th>19시</th></tr>"
+        "<tr><th>주중</th><th>실외</th><td>마감</td></tr>"
+        "</table>"
+    )
+
+    class FakeResp:
+        text = html
+        encoding = "utf-8"
+
+    monkeypatch.setattr("requests.Session.get", lambda self, *a, **k: FakeResp())
+    settings = {"올림픽공원레슨": {"받기": True, "코트": ["실외"], "주중": [19]}}
+    assert fetch_olympic_states(settings) == {"주중 실외 19시": "마감"}
