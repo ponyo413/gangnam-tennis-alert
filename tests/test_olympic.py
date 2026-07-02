@@ -104,7 +104,7 @@ def test_build_messages_변동은_화살표():
     cur = {"주중 실내 19시": "15"}
     msgs = build_olympic_messages(cur, prev)
     assert len(msgs) == 1
-    assert "19" in msgs[0] and "15" in msgs[0]
+    assert "19 → 15" in msgs[0]   # 직전 → 현재 화살표가 실제로 렌더링되는지(라벨의 "19"에 속지 않게)
 
 
 def test_fetch_받기off는_빈dict():
